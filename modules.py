@@ -587,13 +587,154 @@ MODULAR_DIY = Architecture(
     max_turns=16,
 )
 
+# ── 以下五個是「純政策」架構：沒有新增任何模組，只是換一套編排規則 ──
+# 五篇論文、零行新程式碼。這是 Modular RAG 主張最直接的證據。
+
+REWRITE_RETRIEVE_READ = Architecture(
+    name="Rewrite-Retrieve-Read",
+    paper="Ma et al. 2023《Query Rewriting for Retrieval-Augmented LLMs》arXiv:2305.14283",
+    orchestration="Linear（Pre-retrieval 改寫）",
+    modules=["search"],
+    policy="""照 Rewrite → Retrieve → Read 三步走，只在檢索**之前**下功夫：
+
+1. **Rewrite**：把使用者的問題改寫成「文件作者可能會用的說法」。
+   明確寫出改寫前後，並說明你換掉了哪些詞、為什麼。
+   使用者說的是需求語言，文件寫的是實作語言 —— 這中間的落差就是檢索失敗的主因。
+2. **Retrieve**：用改寫後的 query 做一次 search。
+3. **Read**：根據結果作答。
+
+不要評估、不要重試。這個架構刻意只做前置改寫，
+用來對照 CRAG 那種「在檢索之後補救」的做法 —— 兩者可以疊加，但先分開理解。""",
+    max_turns=6,
+)
+
+SELF_ASK = Architecture(
+    name="Self-Ask",
+    paper="Press et al. 2022《Measuring and Narrowing the Compositionality Gap》arXiv:2210.03350",
+    orchestration="Linear（顯式問題分解）",
+    modules=["search"],
+    policy="""Self-Ask 的核心觀察：模型知道所有子事實，卻答錯需要組合它們的問題（compositionality gap）。
+解法是**逼它把子問題明講出來**，一個一個查。
+
+嚴格照這個格式跑，每一步都要寫出來：
+
+```
+是否需要後續問題：是
+後續問題：<子問題 1>
+中間答案：<用 search 查到的答案>
+後續問題：<子問題 2>
+中間答案：<用 search 查到的答案>
+所以最終答案是：<組合出來的答案>
+```
+
+規則：
+
+- **一次只問一個子問題**，查到答案再問下一個。不要一口氣列完所有子問題。
+- 下一個子問題可以依賴上一個的中間答案 —— 這就是它比一次性分解強的地方。
+- 如果第一步就判斷不需要分解，寫「是否需要後續問題：否」然後直接查、直接答。
+- 中間答案一樣要標出處。""",
+    max_turns=14,
+)
+
+IRCOT = Architecture(
+    name="IRCoT（交錯檢索與推理）",
+    paper="Trivedi et al. 2023《Interleaving Retrieval with Chain-of-Thought Reasoning》arXiv:2212.10509",
+    orchestration="Looping（推理與檢索交錯）",
+    modules=["search", "expand"],
+    policy="""IRCoT 和 Self-Ask 的差別很細但很重要：
+Self-Ask 分解的是**問題**，IRCoT 讓**推理的每一句話**都去帶動下一次檢索。
+
+流程是一個小迴圈，每輪做兩件事：
+
+1. **推理一步**：根據目前手上的所有片段，寫出思路的**下一句**（只寫一句，不要一口氣寫完）。
+2. **用那句話去檢索**：把剛寫的那句當成 query 呼叫 search —— 不是用原問題，是用你剛推出來的那句。
+
+重複到你的推理鏈自然收斂到答案為止。每輪都要寫出「這一句推理」和「因此我要查什麼」。
+
+為什麼有效：多跳問題的第二跳關鍵字，往往只有在推完第一跳之後才知道。
+用原問題查一百次也查不到第二跳需要的東西。
+
+片段被切斷時用 expand 補上下文。最多跑六輪，收斂不了就如實說明卡在哪一跳。""",
+    max_turns=16,
+)
+
+FLARE = Architecture(
+    name="FLARE（前瞻式主動檢索）",
+    paper="Jiang et al. 2023《Active Retrieval Augmented Generation》arXiv:2305.06983",
+    orchestration="Looping（依信心觸發檢索）",
+    modules=["search", "grade_documents"],
+    policy="""前面每個架構都是「先檢索、再生成」。FLARE 反過來：**先生成，沒把握的地方才去檢索**。
+
+流程：
+
+1. **先寫草稿**：不查任何東西，直接把答案寫出來（就算你不確定）。
+2. **標出沒把握的句子**：逐句檢視，把你「其實在猜」的句子明確列出來，並說明為什麼沒把握
+   （具體數字？專有名詞？版本號？流程細節？）。
+3. **只針對那些句子檢索**：把每個沒把握的句子當成 query 呼叫 search ——
+   用**句子本身**當查詢，不是用原問題。
+4. **改寫**：用檢索結果修正那些句子。查不到的就刪掉，或明講「知識庫沒有這項」。
+5. 如果改寫後又產生新的不確定句子，再跑一輪。最多兩輪。
+
+省成本的地方在這裡：**有把握的部分完全不花檢索成本**。
+代價是你得先相信模型「知道自己不知道」—— 這個假設不是永遠成立，
+所以最後要用 grade_documents 驗一次關鍵片段，避免它對自己太有信心。""",
+    max_turns=14,
+)
+
+SEARCH_O1 = Architecture(
+    name="Search-o1",
+    paper="Li et al. 2025《Search-o1: Agentic Search-Enhanced Large Reasoning Models》arXiv:2501.05366",
+    orchestration="Looping（推理中斷點檢索 + 文件精煉）",
+    modules=["search", "grade_documents", "expand"],
+    builtin_tools=["WebSearch"],
+    policy="""Search-o1 是為「長推理模型」設計的：讓它**在推理途中卡住的那一刻**才去查，
+而且查回來的東西**先精煉再放進推理鏈**。
+
+兩個機制要分開做：
+
+**一、在不確定點觸發檢索**
+
+正常往下推理，一旦遇到「我不確定這裡」的知識缺口，就**停下來明講**：
+
+> [知識缺口] 我需要知道 X 才能繼續，因為 Y。
+
+然後才去 search。不要一開始就把所有能查的都查一遍 —— 那是浪費，
+也會讓不相關的片段污染後面的推理。
+
+**二、Reason-in-Documents：先精煉再注入**
+
+這是 Search-o1 最關鍵的一步，也是最常被略過的一步。
+檢索回來的原文**不要直接塞進推理鏈**，先用 grade_documents 讀完整內文，然後：
+
+1. 只抽出「跟目前這個知識缺口有關」的部分
+2. 壓縮成一到三句話
+3. 明講這段精煉內容從哪個片段來
+
+**只把精煉後的那幾句放進推理鏈。** 原因是長推理最怕上下文被雜訊稀釋 ——
+直接注入整段原文會讓後面的推理跑偏。
+
+知識庫真的沒有的時候才用 WebSearch，網路來源要標成 `[web: 站名 - 網址]`。""",
+    max_turns=18,
+)
+
 ARCHITECTURES: dict[str, Architecture] = {
+    # 基準線
     "naive": NAIVE,
-    "rag_fusion": RAG_FUSION,
+    # Pre-retrieval：在檢索「之前」動手腳
+    "rewrite": REWRITE_RETRIEVE_READ,
     "hyde": HYDE,
+    "rag_fusion": RAG_FUSION,
+    # 問題分解 / 多跳
+    "self_ask": SELF_ASK,
+    "ircot": IRCOT,
+    # Post-retrieval：在檢索「之後」補救
     "crag": CRAG,
     "self_rag": SELF_RAG,
+    # 依需要才檢索
+    "flare": FLARE,
+    "search_o1": SEARCH_O1,
     "adaptive": ADAPTIVE,
+    # 全部給你自己組
     "modular": MODULAR_DIY,
 }
 

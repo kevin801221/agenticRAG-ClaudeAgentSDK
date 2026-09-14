@@ -75,17 +75,39 @@ Agent SDK 底層 spawn 的是 Claude Code CLI —— **CLI 讀什麼憑證，它
 | 編排 orchestration | `system_prompt` 裡的流程規則 |
 | 架構 architecture | 模組清單 + 編排規則 → `modules.py` 的 `Architecture` |
 
-### 七個現成架構
+### 十二個現成架構
 
-| 架構 | 編排 | 關鍵模組 | 出處 |
+| 架構 | 編排 | 一句話 | 出處 |
 |---|---|---|---|
-| Naive RAG | Linear | search | Lewis et al. 2020 |
-| RAG-Fusion | Branching | multi_search | Query Expansion 系列 |
-| HyDE | Linear（前置轉換） | hyde_search | Gao et al. 2022 |
-| CRAG | Conditional（三分支 + web） | grade_documents + WebSearch | Yan et al. 2024 |
-| Self-RAG | Looping | grade + 反思政策 | Asai et al. 2024 |
-| Adaptive-RAG | Conditional（複雜度路由） | 分類 → 三條路 | Jeong et al. 2024 |
-| Modular RAG | 自適應 | 全部 | Gao et al. 2024 |
+| Naive RAG | Linear | 查一次就答，基準線 | Lewis et al. 2020 |
+| **Rewrite-Retrieve-Read** | Linear | 只在檢索**前**改寫 query | Ma et al. 2023 |
+| HyDE | Linear | 拿「猜的答案」而非問題去比對 | Gao et al. 2022 |
+| RAG-Fusion | Branching | 多個 query 平行查再 RRF 融合 | Query Expansion 系列 |
+| **Self-Ask** | Linear | 顯式寫出後續子問題，一個一個查 | Press et al. 2022 |
+| **IRCoT** | Looping | 推理**每一句**都帶動下一次檢索 | Trivedi et al. 2023 |
+| CRAG | Conditional | 評分後走三分支，最後一支上網 | Yan et al. 2024 |
+| Self-RAG | Looping | 每輪自問四個反思問題 | Asai et al. 2024 |
+| **FLARE** | Looping | 先寫草稿，沒把握的句子才去查 | Jiang et al. 2023 |
+| **Search-o1** | Looping | 推理卡住才查，且先精煉再注入 | Li et al. 2025 |
+| Adaptive-RAG | Conditional | 先判斷複雜度再決定花多少力氣 | Jeong et al. 2024 |
+| Modular RAG | 自適應 | 全部模組給 agent 自己編排 | Gao et al. 2024 |
+
+**粗體的五個是純政策架構** —— 加它們的時候一行程式碼都沒寫，只是各多了一份 `Architecture`。
+這是 Modular RAG 主張最直接的證據：五篇論文，零行新程式碼。
+
+### 什麼**沒有**收進來，為什麼
+
+有些方法動的不是編排，而是**索引期**，那不是換一份 policy 就能做到的：
+
+| 方法 | 它動的是什麼 | 為什麼沒收 |
+|---|---|---|
+| RAPTOR | 索引時遞迴分群 + 摘要，建成一棵樹 | 要重寫 `index_corpus.py`，而且建索引得呼叫 LLM |
+| GraphRAG / LightRAG / HippoRAG | 索引時抽實體關係建圖 | 同上，還要一個圖資料庫 |
+| Contextual Retrieval | 索引時為每個片段生成前後脈絡再嵌入 | 索引期需要 LLM，破壞「clone 下來 60 秒跑起來」 |
+| Search-E1 / R²-Searcher / IG-Search | 用 RL 訓練檢索策略 | 需要訓練，不是 prompt 能複製的 |
+
+**這件事本身就是一課**：Modular RAG 的模組不只在檢索期，也在索引期。
+prompt 換得動編排，換不動索引。
 
 **新增一個架構不用寫程式碼**，寫一份 `Architecture` 就好：
 
