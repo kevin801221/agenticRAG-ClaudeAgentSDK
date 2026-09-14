@@ -54,10 +54,21 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pipe-meta.live{color:var(--signal)}
   .pipe-body{
-    overflow:hidden auto;max-height:64vh;opacity:1;
-    padding:0 1rem .3rem;transition:max-height .3s ease,opacity .22s ease,padding .3s ease;
+    overflow:hidden auto;max-height:var(--pipeH,340px);opacity:1;
+    padding:0 1rem .3rem;transition:opacity .22s ease,padding .3s ease;
   }
   .pipe.collapsed .pipe-body{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
+
+  /* 流程圖下緣的橫線：拖它可以調整流程圖區的高度 */
+  .hsplit{
+    height:7px;background:var(--rail);cursor:row-resize;position:relative;flex-shrink:0;
+    transition:background .15s;
+  }
+  .hsplit::after{content:"";position:absolute;inset:-4px 0}   /* 抓取範圍加大 */
+  .hsplit:hover,.hsplit.dragging{background:var(--signal)}
+  .hsplit:focus-visible{outline:2px solid var(--signal);outline-offset:1px}
+  .pipe.collapsed + .hsplit{display:none}      /* 收合時沒有東西可調 */
+  body.vresizing{cursor:row-resize;user-select:none}
   .pipe svg{display:block;width:100%;min-width:760px;height:auto}
   @media (prefers-reduced-motion:reduce){
     .pipe-body{transition:none}
@@ -212,6 +223,29 @@
   .msg.ai .body th,.msg.ai .body td{border:1px solid var(--rail);padding:.3rem .5rem;text-align:left;vertical-align:top}
   .hidden{display:none !important}
 
+  /* ── 筆記本 ── */
+  .savebar{display:flex;align-items:center;gap:.5rem;margin-top:.5rem}
+  .savebtn{
+    padding:.2rem .6rem;font-size:.78rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail);
+  }
+  .savebtn:hover{border-color:var(--ok);color:var(--ok)}
+  .savebtn.saved{border-color:var(--ok);color:var(--ok);cursor:default}
+  .noteshead{display:flex;align-items:center;gap:.7rem;margin:.9rem 0 .6rem}
+  .noteshead button{padding:.2rem .7rem;font-size:.8rem;font-weight:400;align-self:auto}
+  .notes{display:flex;flex-direction:column;gap:.7rem;max-height:46vh;overflow-y:auto}
+  .note{border:1px solid var(--rail);border-radius:5px;padding:.6rem .8rem;background:var(--panel-2)}
+  .note .q{font-weight:600;font-size:.92rem;margin-bottom:.2rem}
+  .note .meta{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
+  .note .a{font-size:.86rem;color:var(--ink);opacity:.85;max-height:5.5rem;overflow:hidden;white-space:pre-line}
+  .note .row{display:flex;gap:.5rem;margin-top:.5rem}
+  .note .row button{padding:.15rem .55rem;font-size:.75rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .note .row button:hover{color:var(--ink);border-color:var(--signal)}
+  .note .row button.del:hover{color:var(--alert);border-color:var(--alert)}
+  .note img{max-width:180px;max-height:90px;border:1px solid var(--rail);border-radius:3px;
+    margin-bottom:.4rem;display:block;background:#fff}
+
   .lede{color:var(--muted);margin:0 0 1rem;max-width:46ch;font-size:.92rem}
   form{display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.1rem}
   .archpick{display:flex;align-items:center;gap:.6rem;font-size:.85rem;color:var(--muted)}
@@ -355,6 +389,9 @@
   </div>
 </section>
 
+<div class="hsplit" id="hsplit" role="separator" aria-orientation="horizontal"
+     aria-label="調整流程圖區高度" tabindex="0"></div>
+
 <main>
   <section class="col ask" id="leftCol">
     <div id="askView">
@@ -413,6 +450,14 @@
 </main>
 
 <footer>
+  <details id="notesPanel">
+    <summary>筆記本 <span id="notesCount"></span></summary>
+    <div class="noteshead">
+      <button type="button" id="notesExport">匯出 Markdown</button>
+      <span class="pipe-meta">存下來的問答會寫進 notes/，匯出的 .md 可以直接貼進教材</span>
+    </div>
+    <div class="notes" id="notesList"></div>
+  </details>
   <details>
     <summary>語料庫 — 點檔名直接看，PDF 會開閱讀器</summary>
     <div class="corpus" id="corpusList"></div>
@@ -428,6 +473,7 @@ const $ = id => document.getElementById(id);
 const SVG = 'http://www.w3.org/2000/svg';
 const trace = $('trace'), answerEl = $('answer'), sourceView = $('sourceView');
 let ARCHS = [], STAGES = [], NODES = {}, lastNode = null, lastTool = null, FLOOR = 0;
+let lastAnswer = '', lastQuestion = '';
 // 使用者手動打開的話，跑完就不要自動收回去 —— 他正在看
 let pipePinned = false;
 
@@ -685,6 +731,8 @@ $('form').onsubmit = ev => { ev.preventDefault(); ask($('q').value.trim()); };
 
 function ask(question) {
   if (!question) return;
+  lastQuestion = question;
+  lastAnswer = '';
   trace.innerHTML = '';
   answerEl.textContent = '';
   sourceView.innerHTML = '';
@@ -740,7 +788,12 @@ function handle(ev, es) {
     return;
   }
 
-  if (ev.type === 'answer') { finishPipe(); return renderAnswer(ev.text); }
+  if (ev.type === 'answer') {
+    finishPipe();
+    renderAnswer(ev.text);
+    lastAnswer = ev.text;
+    return;
+  }
 
   if (ev.type === 'error') {
     card('turn', '<div class="pivot"><strong>錯誤</strong> — ' + esc(ev.text) + '</div>');
@@ -752,6 +805,15 @@ function handle(ev, es) {
     pipeMeta(`${archLabel()} · 完成 ${ev.turns} 次呼叫 · ${(ev.elapsed_ms / 1000).toFixed(1)} 秒`);
     // 留 1.8 秒讓最後一步看得完，再收回去。使用者自己打開的就不要動它。
     if (!pipePinned) setTimeout(() => { if (!pipePinned) setPipeOpen(false); }, 1800);
+    if (lastAnswer) {
+      noteBar($('answer'), () => ({
+        question: lastQuestion,
+        answer: lastAnswer,
+        source: '',
+        arch: $('arch').value,
+        citations: [...$('answer').querySelectorAll('.cite')].map(c => c.dataset.id),
+      }));
+    }
     card('think', '<div class="why">完成：' + esc(ev.architecture || '') + ' · ' + ev.turns +
                   ' 次模組呼叫 · ' + (ev.elapsed_ms / 1000).toFixed(1) + ' 秒</div>');
     finish(es);
@@ -785,6 +847,71 @@ fetch('/api/corpus').then(r => r.json()).then(list => {
     };
   });
 });
+
+/* ══════════ 筆記本 ══════════ */
+
+function noteBar(container, payload) {
+  const bar = document.createElement('div');
+  bar.className = 'savebar';
+  const b = document.createElement('button');
+  b.className = 'savebtn';
+  b.type = 'button';
+  b.textContent = '＋ 存進筆記本';
+  b.onclick = () => {
+    b.disabled = true;
+    b.textContent = '存檔中…';
+    fetch('/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload()),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(() => { b.textContent = '✓ 已存'; b.classList.add('saved'); loadNotes(); })
+      .catch(() => { b.disabled = false; b.textContent = '存檔失敗，再試一次'; });
+  };
+  bar.appendChild(b);
+  container.appendChild(bar);
+}
+
+function loadNotes() {
+  fetch('/api/notes').then(r => r.json()).then(list => {
+    $('notesCount').textContent = list.length ? '(' + list.length + ')' : '';
+    $('notesList').innerHTML = list.length ? '' : '<p class="empty">還沒有筆記。看到好的回答就按「存進筆記本」。</p>';
+    list.forEach(n => {
+      const d = document.createElement('div');
+      d.className = 'note';
+      d.innerHTML =
+        '<div class="q">' + esc(n.question) + '</div>' +
+        '<div class="meta">' + esc(n.created_at) + (n.source ? ' ｜ ' + esc(n.source) : '') + '</div>' +
+        (n.image ? '<img src="/api/notes/image/' + n.id + '" alt="錨定區域">' : '') +
+        '<div class="a">' + esc(n.answer.slice(0, 320)) + (n.answer.length > 320 ? '…' : '') + '</div>' +
+        '<div class="row"></div>';
+      const row = d.querySelector('.row');
+      if (n.source) {
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.textContent = '開啟來源';
+        open.onclick = () => {
+          openDoc(n.source, n.source.toLowerCase().endsWith('.pdf'), 1);
+          $('notesPanel').open = false;
+        };
+        row.appendChild(open);
+      }
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'del';
+      del.textContent = '刪除';
+      del.onclick = () => {
+        fetch('/api/notes/' + n.id, { method: 'DELETE' }).then(loadNotes);
+      };
+      row.appendChild(del);
+      $('notesList').appendChild(d);
+    });
+  });
+}
+
+$('notesExport').onclick = () => { window.location = '/api/notes/export'; };
+loadNotes();
 
 /* ══════════ 可拖曳分隔線 ══════════ */
 
@@ -830,6 +957,48 @@ fetch('/api/corpus').then(r => r.json()).then(list => {
     const cur = parseFloat(main.style.getPropertyValue('--split') || '42');
     if (e.key === 'ArrowLeft') { setSplit(cur - 3); e.preventDefault(); }
     if (e.key === 'ArrowRight') { setSplit(cur + 3); e.preventDefault(); }
+  });
+})();
+
+/* ══════════ 流程圖高度：拖下面那條橫線 ══════════ */
+
+(function () {
+  const bar = $('hsplit'), wrap = $('pipeWrap');
+  const MIN = 90, MAX = () => Math.round(window.innerHeight * 0.72);
+
+  function setH(px) {
+    wrap.style.setProperty('--pipeH', Math.min(MAX(), Math.max(MIN, px)) + 'px');
+  }
+  try {
+    const saved = localStorage.getItem('pipeH');
+    if (saved) setH(parseFloat(saved));
+  } catch (e) {}
+
+  let dragging = false;
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    setH(e.clientY - $('pipeBody').getBoundingClientRect().top);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    bar.classList.remove('dragging');
+    document.body.classList.remove('vresizing');
+    try {
+      localStorage.setItem('pipeH', parseFloat(wrap.style.getPropertyValue('--pipeH')));
+    } catch (e) {}
+    // 高度變了，PDF 文字層的座標要重算
+    if (DOC.path && DOC.isPdf) renderDoc();
+  });
+  bar.addEventListener('mousedown', e => {
+    dragging = true; e.preventDefault();
+    bar.classList.add('dragging');
+    document.body.classList.add('vresizing');
+  });
+  bar.addEventListener('keydown', e => {
+    const cur = parseFloat(wrap.style.getPropertyValue('--pipeH') || '340');
+    if (e.key === 'ArrowUp') { setH(cur - 24); e.preventDefault(); }
+    if (e.key === 'ArrowDown') { setH(cur + 24); e.preventDefault(); }
   });
 })();
 
@@ -1116,6 +1285,8 @@ $('docForm').onsubmit = ev => {
 
 function askDoc(q, anchored) {
   const log = $('chatLog');
+  const thumb = $('anchorThumb').classList.contains('hidden') ? '' : $('anchorThumb').src;
+  let raw = '';        // 原始 markdown —— 存筆記要存這個，不是渲染後的純文字
 
   const me = document.createElement('div');
   me.className = 'msg me';
@@ -1145,6 +1316,7 @@ function askDoc(q, anchored) {
       steps.push(ev.tool);
       ai.querySelector('.steps').textContent = steps.join(' → ');
     } else if (ev.type === 'answer') {
+      raw = ev.text;
       ai.querySelector('.body').innerHTML = md(ev.text).replace(/\[([^\[\]\s]+#\d+)\]/g,
         (_, id) => '<span class="cite" data-id="' + id + '">' + id + '</span>');
       ai.querySelectorAll('.cite').forEach(el => {
@@ -1155,6 +1327,15 @@ function askDoc(q, anchored) {
         (steps.length ? steps.join(' → ') + ' · ' : '') + (ev.elapsed_ms / 1000).toFixed(1) + ' 秒';
       es.close();
       $('docGo').disabled = false;
+      noteBar(ai, () => ({
+        question: q,
+        answer: raw,
+        anchor: anchored || '',
+        source: DOC.path,
+        arch: 'doc_chat',
+        image: thumb || '',
+        citations: [...ai.querySelectorAll('.cite')].map(c => c.dataset.id),
+      }));
       ai.scrollIntoView({ block: 'nearest' });
     } else if (ev.type === 'error' && ev.fatal) {
       ai.querySelector('.body').textContent = '出錯了：' + ev.text;

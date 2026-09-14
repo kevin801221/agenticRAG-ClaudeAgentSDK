@@ -6,12 +6,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 load_dotenv()
@@ -197,6 +200,115 @@ async def architectures() -> list[dict]:
         }
         for key, a in ARCHITECTURES.items()
     ]
+
+
+# ══════════ 筆記本 ══════════
+#
+# 存在伺服器而不是瀏覽器 localStorage，因為這些筆記的用途是「之後變成教材」——
+# 要能匯出、能進 git、能在別台機器打開。
+
+NOTES_DIR = HERE / "notes"
+NOTES_FILE = NOTES_DIR / "notes.json"
+NOTES_IMG = NOTES_DIR / "images"
+
+
+def _load_notes() -> list[dict]:
+    if not NOTES_FILE.exists():
+        return []
+    try:
+        return json.loads(NOTES_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+
+def _save_notes(notes: list[dict]) -> None:
+    NOTES_DIR.mkdir(exist_ok=True)
+    NOTES_FILE.write_text(json.dumps(notes, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+@app.get("/api/notes")
+async def list_notes() -> list[dict]:
+    return _load_notes()
+
+
+@app.post("/api/notes")
+async def add_note(note: dict = Body(...)) -> dict:
+    """存一則問答。image 是錨定區域的截圖（dataURL），可有可無。"""
+    if not (note.get("question") or "").strip() or not (note.get("answer") or "").strip():
+        raise HTTPException(400, "問題與答案都不能是空的")
+
+    nid = uuid.uuid4().hex[:10]
+    image_file = ""
+    data_url = note.get("image") or ""
+    if data_url.startswith("data:image/png;base64,"):
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+        if len(raw) > 4_000_000:
+            raise HTTPException(400, "截圖太大")
+        NOTES_IMG.mkdir(parents=True, exist_ok=True)
+        image_file = f"images/{nid}.png"
+        (NOTES_DIR / image_file).write_bytes(raw)
+
+    entry = {
+        "id": nid,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "question": note["question"].strip(),
+        "answer": note["answer"].strip(),
+        "anchor": (note.get("anchor") or "").strip(),
+        "source": note.get("source") or "",
+        "arch": note.get("arch") or "",
+        "citations": note.get("citations") or [],
+        "image": image_file,
+    }
+    notes = _load_notes()
+    notes.insert(0, entry)          # 新的放最前面
+    _save_notes(notes)
+    return entry
+
+
+@app.delete("/api/notes/{note_id}")
+async def delete_note(note_id: str) -> dict:
+    notes = _load_notes()
+    keep = [n for n in notes if n["id"] != note_id]
+    if len(keep) == len(notes):
+        raise HTTPException(404, f"沒有這則筆記：{note_id}")
+    gone = next(n for n in notes if n["id"] == note_id)
+    if gone.get("image"):
+        (NOTES_DIR / gone["image"]).unlink(missing_ok=True)
+    _save_notes(keep)
+    return {"deleted": note_id, "left": len(keep)}
+
+
+@app.get("/api/notes/export")
+async def export_notes() -> Response:
+    """匯出成 Markdown —— 這些筆記的終點是教材，所以要能直接貼。"""
+    notes = _load_notes()
+    lines = [
+        "# Agentic RAG 筆記",
+        "",
+        f"共 {len(notes)} 則 · 匯出於 {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "",
+    ]
+    for i, n in enumerate(reversed(notes), 1):      # 匯出照時間正序比較好讀
+        lines += [f"## {i}. {n['question']}", ""]
+        meta = [n["created_at"]]
+        if n["source"]:
+            meta.append(n["source"])
+        if n["arch"]:
+            meta.append(n["arch"])
+        lines += ["> " + " ｜ ".join(meta), ""]
+        if n.get("image"):
+            lines += [f"![錨定區域]({n['image']})", ""]
+        if n["anchor"]:
+            lines += ["**錨定內容**", ""]
+            lines += ["> " + ln for ln in n["anchor"].splitlines()] + [""]
+        lines += [n["answer"], "", "---", ""]
+
+    md = "\n".join(lines)
+    return Response(
+        md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="agentic-rag-notes.md"'},
+    )
 
 
 @app.get("/api/ask")

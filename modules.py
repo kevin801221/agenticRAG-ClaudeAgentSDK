@@ -146,6 +146,10 @@ def grade_documents(ix: Index, question: str, chunk_ids: list[str]) -> dict:
     """[Post-retrieval] CRAG 的 evaluator：取回完整內文讓模型自評。
 
     這個工具自己一分都不打 —— 分數由模型判斷。
+
+    也刻意不回傳「接下來該怎麼做」：那是編排，屬於 Architecture 的 policy。
+    工具回傳值裡夾指示，模型會（正確地）把它當成來路不明的指令而警戒，
+    答案裡就會多出一句「我沒有照它執行」的雜訊。**工具回資料，policy 給指示。**
     「夠不夠回答這個問題」是語意判斷，不是數值判斷：
     cosine 0.8 可能完全沒用，0.4 可能正中紅心。
     把評分寫成 Python 的那一刻，整套就退化回 pipeline RAG 了。
@@ -165,13 +169,7 @@ def grade_documents(ix: Index, question: str, chunk_ids: list[str]) -> dict:
             }
             for cid in chunk_ids
         ],
-        "next_step": (
-            "CRAG（Yan et al. 2024）的三個分支，依整體信心度選一條："
-            "高信心 → CORRECT：不要整段照抄，先把這些內文拆成小段、丟掉無關的、"
-            "再重組成精煉的 knowledge strips，然後作答；"
-            "低信心 → INCORRECT：丟掉這些檢索結果，改用外部來源（論文用 web search）；"
-            "判斷不了 → AMBIGUOUS：兩者都用 —— 精煉後的內部知識 + 外部來源，合併後作答。"
-        ),
+
     }
 
 

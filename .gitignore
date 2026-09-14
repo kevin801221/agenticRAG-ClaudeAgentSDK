@@ -7,3 +7,6 @@ data/
 
 # 論文 PDF 不進 repo（別人的著作，各自有授權）—— 用 scripts/fetch_papers.sh 抓
 corpus/papers/
+
+# 筆記是個人的，不進 repo（要分享就用匯出的 markdown）
+notes/
