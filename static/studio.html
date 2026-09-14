@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic RAG Studio — 畫布版組裝台</title>
+<style>
+  :root{
+    --ground:#151B2B; --panel:#1E2639; --panel-2:#232C42; --rail:#33405C;
+    --ink:#EEF1F8; --muted:#8B96B3;
+    --signal:#F2B441;      /* 鈉燈琥珀：選中 / 正在動作 */
+    --alert:#FF7A6B;       /* 折返：往回連的線 */
+    --ok:#6FD3A8;
+    --ext:#8FA8FF;         /* SDK 內建工具 */
+    --mono:"Menlo","SF Mono",ui-monospace,monospace;
+    --sans:"Avenir Next","Helvetica Neue",-apple-system,"PingFang TC","Noto Sans TC",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--ground);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.6;display:flex;flex-direction:column;overflow:hidden;
+  }
+  button{
+    font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer;
+    background:var(--signal);color:#1A1205;border:0;border-radius:4px;padding:.3rem .9rem;
+  }
+  button:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:default;filter:none}
+  .ghost{background:none;color:var(--muted);border:1px solid var(--rail);font-weight:400}
+  .ghost:hover{color:var(--ink);border-color:var(--signal);filter:none}
+  input,select,textarea{
+    font-family:inherit;background:var(--panel-2);color:var(--ink);
+    border:1px solid var(--rail);border-radius:4px;padding:.25rem .45rem;font-size:.85rem;
+  }
+  input:focus,select:focus,textarea:focus{outline:0;border-color:var(--signal)}
+  a{color:var(--signal)}
+
+  /* ── 頂 ── */
+  header{
+    display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
+    padding:.6rem 1.2rem;border-bottom:1px solid var(--rail);background:var(--panel);flex:0 0 auto;
+  }
+  header h1{font-size:1rem;margin:0;letter-spacing:.02em}
+  header .claim{
+    font-size:.82rem;color:var(--muted);border-left:2px solid var(--signal);padding-left:.7rem;
+  }
+  header .claim b{color:var(--signal);font-weight:600}
+  header .spacer{flex:1}
+  header label{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:.35rem}
+
+  main{flex:1;display:grid;grid-template-columns:230px minmax(0,1fr) 400px;min-height:0}
+
+  /* ── 模組庫 ── */
+  .palette{
+    border-right:1px solid var(--rail);background:var(--panel);overflow-y:auto;padding:.8rem;
+  }
+  .palette h2{font-size:.78rem;color:var(--muted);margin:0 0 .5rem;font-weight:600;
+    text-transform:uppercase;letter-spacing:.08em}
+  .palette .grp{margin-bottom:.9rem}
+  .palette .lbl{font-family:var(--mono);font-size:.68rem;color:var(--muted);
+    display:block;margin-bottom:.3rem}
+  .pchip{
+    display:block;font-family:var(--mono);font-size:.78rem;
+    padding:.3rem .5rem;margin-bottom:.25rem;border-radius:4px;
+    border:1px solid var(--rail);background:var(--panel-2);cursor:grab;user-select:none;
+  }
+  .pchip:hover{border-color:var(--signal)}
+  .pchip.ext{color:var(--ext);border-color:rgba(143,168,255,.35)}
+  .pchip .d{display:block;font-family:var(--sans);font-size:.7rem;color:var(--muted);
+    line-height:1.4;margin-top:.1rem}
+  .palette .tip{font-size:.72rem;color:var(--muted);line-height:1.5;margin-top:1rem;
+    border-top:1px solid var(--rail);padding-top:.6rem}
+
+  /* ── 畫布 ── */
+  .stage{position:relative;overflow:auto;min-width:0;background:
+    radial-gradient(circle at 1px 1px, rgba(139,150,179,.18) 1px, transparent 0) 0 0/22px 22px,
+    var(--ground);}
+  #canvas{position:relative;width:2600px;height:1600px}
+  #wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  #wires path{fill:none;stroke:var(--rail);stroke-width:1.6}
+  #wires path.back{stroke:var(--alert);stroke-dasharray:5 4}
+  #wires path.sel{stroke:var(--signal);stroke-width:2.4}
+  #wires path.hit{stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
+  #wires .tip{fill:var(--rail)}
+  #wires .tip.back{fill:var(--alert)}
+
+  .node{
+    position:absolute;width:208px;border:1px solid var(--rail);border-radius:6px;
+    background:var(--panel);padding:.45rem .6rem;cursor:grab;user-select:none;
+  }
+  .node:hover{border-color:var(--signal)}
+  .node.sel{border-color:var(--signal);box-shadow:0 0 0 1px var(--signal)}
+  .node .n{font-family:var(--mono);font-size:.82rem}
+  .node .s{font-size:.68rem;color:var(--muted);font-family:var(--mono)}
+  .node .d{font-size:.72rem;color:var(--muted);line-height:1.4;margin-top:.15rem}
+  .node.ext .n{color:var(--ext)}
+  .node.ext{border-style:dashed}
+  .node.anchor{background:var(--panel-2);border-color:var(--signal);width:170px}
+  .node.anchor .n{color:var(--signal)}
+  .node .x{
+    position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;
+    background:var(--panel-2);border:1px solid var(--rail);color:var(--muted);
+    font-size:.7rem;line-height:16px;text-align:center;display:none;cursor:pointer;
+  }
+  .node:hover .x{display:block}
+  .node .x:hover{color:var(--alert);border-color:var(--alert)}
+  .port{
+    position:absolute;width:11px;height:11px;border-radius:50%;
+    background:var(--panel-2);border:1.5px solid var(--rail);top:50%;margin-top:-5.5px;cursor:crosshair;
+  }
+  .port.out{right:-6px}
+  .port.in{left:-6px}
+  .port:hover,.port.live{background:var(--signal);border-color:var(--signal)}
+
+  .elabel{
+    position:absolute;transform:translate(-50%,-50%);z-index:3;
+    font-size:.7rem;font-family:var(--mono);white-space:nowrap;
+    background:var(--ground);border:1px solid var(--rail);border-radius:3px;
+    padding:.05rem .35rem;color:var(--muted);cursor:text;
+  }
+  .elabel:hover{border-color:var(--signal);color:var(--ink)}
+  .elabel.empty{opacity:.45}
+  .elabel input{width:9rem;font-size:.7rem;padding:0 .15rem;border:0;background:none}
+
+  .hint{
+    position:absolute;left:50%;top:38%;transform:translateX(-50%);
+    text-align:center;color:var(--muted);font-size:.85rem;line-height:1.8;pointer-events:none;
+  }
+  .hint code{font-family:var(--mono);color:var(--ink)}
+
+  /* ── 右欄 ── */
+  .side{
+    border-left:1px solid var(--rail);background:var(--panel);
+    overflow-y:auto;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.7rem;
+  }
+  .side h2{font-size:.82rem;margin:0;color:var(--ink)}
+  .side .sub{font-size:.74rem;color:var(--muted);margin:0}
+  .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+  .row label{font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:.3rem}
+  .row #sName{flex:1;min-width:8rem}
+  #sTurns{width:3.6rem}
+  .compiled{
+    font-family:var(--mono);font-size:.73rem;line-height:1.7;white-space:pre-wrap;
+    background:var(--panel-2);border:1px solid var(--rail);border-radius:5px;
+    padding:.55rem .7rem;max-height:16rem;overflow-y:auto;color:var(--muted);
+  }
+  .compiled b{color:var(--ink);font-weight:600}
+  .compiled .warn{color:var(--alert)}
+  #sPolicy{width:100%;min-height:14rem;font-family:var(--mono);font-size:.76rem;
+    line-height:1.65;resize:vertical}
+  .note{
+    border-left:2px solid var(--alert);padding:.3rem .65rem;font-size:.78rem;
+    background:rgba(255,122,107,.07);line-height:1.6;
+  }
+  .note b{color:var(--alert)}
+  .msg{font-family:var(--mono);font-size:.74rem;color:var(--muted);line-height:1.6}
+  .msg.bad{color:var(--alert)}
+  .msg.good{color:var(--ok)}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Agentic RAG Studio</h1>
+  <span class="claim"><b>這張圖不會被執行。</b>被執行的是右邊那段 policy —— 圖只是幫你把它想清楚。</span>
+  <span class="spacer"></span>
+  <label>從現有架構開始 <select id="sFrom"><option value="">（空白）</option></select></label>
+  <button type="button" class="ghost" id="sClear">清空畫布</button>
+  <a href="/" class="ghost" style="text-decoration:none;padding:.3rem .9rem;border:1px solid var(--rail);border-radius:4px;font-size:.85rem">回主畫面</a>
+</header>
+
+<main>
+  <section class="palette">
+    <h2>模組庫</h2>
+    <div id="pal"></div>
+    <p class="tip">
+      拖到畫布上放一個模組。<br>
+      從節點右邊的圓點拉到另一個節點，畫一條連線。<br>
+      連線上的方框可以寫條件（「評分不足」）。<br>
+      往回連的線會變紅色 —— 那是折返。<br>
+      選中節點或連線按 <code>Delete</code> 刪掉。
+    </p>
+  </section>
+
+  <section class="stage" id="stage">
+    <div id="canvas">
+      <svg id="wires"></svg>
+      <p class="hint" id="hint">
+        從左邊拖一個模組進來。<br>
+        或用右上角「從現有架構開始」載入一個現成的來改。
+      </p>
+    </div>
+  </section>
+
+  <section class="side">
+    <div class="row">
+      <label style="flex:1">名字 <input id="sName" placeholder="例如：客服知識庫用"></label>
+    </div>
+    <div class="row">
+      <label style="flex:1">編排 <input id="sOrch" placeholder="Linear / Conditional / Branching / Looping" style="flex:1"></label>
+      <label>上限 <input id="sTurns" type="number" min="1" max="30" value="12"></label>
+    </div>
+
+    <h2>這張圖的意思</h2>
+    <p class="sub">把你畫的連線讀成文字。看得懂才表示這張圖真的說清楚了。</p>
+    <div class="compiled" id="sCompiled"></div>
+
+    <h2>policy — 真正會被執行的東西</h2>
+    <p class="sub">agent 收到的是這段字，不是那張圖。</p>
+    <div class="note hidden" id="sNote"></div>
+    <div class="row">
+      <button type="button" class="ghost" id="sWrite">照這張圖幫我寫 policy</button>
+    </div>
+    <textarea id="sPolicy" placeholder="什麼時候用哪個模組、判斷條件是什麼、失敗了怎麼辦、出處要怎麼標。"></textarea>
+
+    <div class="row">
+      <button type="button" id="sSave">存起來</button>
+      <span class="msg" id="sMsg"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const NODE_W = 208, NODE_H = 56, ANCHOR_W = 170;
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+const START = '__start__', ANSWER = '__answer__';
+const META = {};                 // name -> {stage, description, builtin}
+let STAGES = [], ARCHS = [];
+
+const G = { nodes: [], edges: [], sel: null, selEdge: null, seq: 1 };
+
+/* ══════════ 載入 ══════════ */
+
+Promise.all([
+  fetch('/api/pipeline').then(r => r.json()),
+  fetch('/api/architectures').then(r => r.json()),
+]).then(([stages, archs]) => {
+  STAGES = stages;
+  ARCHS = archs;
+  stages.forEach(st => st.modules.forEach(m => {
+    META[m.name] = { stage: st.stage, description: m.description, builtin: !!m.builtin };
+  }));
+  buildPalette();
+  $('sFrom').innerHTML = '<option value="">（空白）</option>' +
+    archs.map(a => '<option value="' + a.key + '">' + esc(a.name) + '</option>').join('');
+  reset();
+});
+
+function buildPalette() {
+  $('pal').innerHTML = STAGES.map(st =>
+    '<div class="grp"><span class="lbl">' + esc(st.stage) + '</span>' +
+    st.modules.map(m =>
+      '<span class="pchip' + (m.builtin ? ' ext' : '') + '" draggable="true" data-name="' +
+      esc(m.name) + '">' + esc(m.name) +
+      '<span class="d">' + esc(m.description) + '</span></span>').join('') +
+    '</div>').join('');
+  $('pal').querySelectorAll('.pchip').forEach(c => {
+    c.ondragstart = e => e.dataTransfer.setData('text/plain', c.dataset.name);
+  });
+}
+
+/* ══════════ 節點與連線 ══════════ */
+
+function reset() {
+  G.nodes = [
+    { id: 'n_start', name: START, x: 60, y: 300 },
+    { id: 'n_answer', name: ANSWER, x: 1160, y: 300 },
+  ];
+  G.edges = [];
+  G.sel = G.selEdge = null;
+  G.seq = 1;
+  render();
+}
+
+function addNode(name, x, y) {
+  if (!META[name]) return;
+  G.nodes.push({ id: 'n' + (G.seq++), name, x: Math.max(0, x), y: Math.max(0, y) });
+  render();
+}
+
+function removeNode(id) {
+  const n = nodeById(id);
+  if (!n || n.name === START || n.name === ANSWER) return;   // 兩個端點不能刪
+  G.nodes = G.nodes.filter(x => x.id !== id);
+  G.edges = G.edges.filter(e => e.from !== id && e.to !== id);
+  G.sel = null;
+  render();
+}
+
+function addEdge(from, to) {
+  if (from === to) return;
+  if (G.edges.some(e => e.from === from && e.to === to)) return;
+  if (nodeById(to).name === START) return;                   // 沒有人連回起點
+  G.edges.push({ id: 'e' + (G.seq++), from, to, label: '' });
+  render();
+}
+
+const nodeById = id => G.nodes.find(n => n.id === id);
+const nodeW = n => (n.name === START || n.name === ANSWER) ? ANCHOR_W : NODE_W;
+
+function label(n) {
+  if (n.name === START) return '問題進來';
+  if (n.name === ANSWER) return '產生答案';
+  return n.name;
+}
+
+function stageIndex(n) {
+  if (n.name === START) return -1;
+  if (n.name === ANSWER) return 99;
+  return STAGES.findIndex(s => s.stage === META[n.name].stage);
+}
+
+/* ══════════ 畫 ══════════ */
+
+function render() {
+  const cv = $('canvas');
+  [...cv.querySelectorAll('.node,.elabel')].forEach(el => el.remove());
+  $('hint').classList.toggle('hidden', G.nodes.length > 2);
+
+  G.nodes.forEach(n => {
+    const m = META[n.name] || {};
+    const anchor = n.name === START || n.name === ANSWER;
+    const d = document.createElement('div');
+    d.className = 'node' + (anchor ? ' anchor' : '') + (m.builtin ? ' ext' : '') +
+                  (G.sel === n.id ? ' sel' : '');
+    d.style.left = n.x + 'px';
+    d.style.top = n.y + 'px';
+    d.dataset.id = n.id;
+    d.innerHTML =
+      '<div class="n">' + esc(label(n)) + '</div>' +
+      (anchor ? '' :
+        '<div class="s">' + esc(m.stage || '') + '</div>' +
+        '<div class="d">' + esc(m.description || '') + '</div>') +
+      (anchor ? '' : '<span class="x" title="刪掉">✕</span>') +
+      (n.name === ANSWER ? '' : '<span class="port out"></span>') +
+      (n.name === START ? '' : '<span class="port in"></span>');
+    cv.appendChild(d);
+
+    d.onpointerdown = e => startDragNode(e, n, d);
+    d.querySelector('.port.out') && (d.querySelector('.port.out').onpointerdown =
+      e => startDragWire(e, n));
+    const x = d.querySelector('.x');
+    if (x) x.onclick = e => { e.stopPropagation(); removeNode(n.id); };
+  });
+
+  drawWires();
+  compile();
+}
+
+function anchors(n) {
+  return { ox: n.x + nodeW(n), oy: n.y + NODE_H / 2, ix: n.x, iy: n.y + NODE_H / 2 };
+}
+
+function floorY() {
+  // 折返線走這條底線，才不會跟正向的線疊在同一條走廊上看不出來
+  return Math.max(...G.nodes.map(n => n.y)) + NODE_H + 70;
+}
+
+function pathFor(a, b) {
+  const A = anchors(a), B = anchors(b);
+  if (stageIndex(b) < stageIndex(a)) {
+    const f = floorY();
+    const sx = a.x + nodeW(a) / 2, sy = a.y + NODE_H;
+    const tx = b.x + nodeW(b) / 2, ty = b.y + NODE_H;
+    return {
+      d: `M${sx},${sy} C${sx},${f} ${tx},${f} ${tx},${ty}`,
+      mid: [(sx + tx) / 2, f - 16],
+      tip: [tx, ty + 2],
+      back: true,
+    };
+  }
+  const dx = Math.max(50, Math.abs(B.ix - A.ox) * 0.45);
+  return {
+    d: `M${A.ox},${A.oy} C${A.ox + dx},${A.oy} ${B.ix - dx},${B.iy} ${B.ix},${B.iy}`,
+    mid: [(A.ox + B.ix) / 2, (A.oy + B.iy) / 2],
+    tip: [B.ix - 2, B.iy],
+    back: false,
+  };
+}
+
+function drawWires() {
+  const svg = $('wires');
+  svg.innerHTML = '';
+  const cv = $('canvas');
+
+  G.edges.forEach(e => {
+    const a = nodeById(e.from), b = nodeById(e.to);
+    if (!a || !b) return;
+    const p = pathFor(a, b);
+
+    const line = document.createElementNS(SVGNS, 'path');
+    line.setAttribute('d', p.d);
+    line.setAttribute('class', (p.back ? 'back' : '') + (G.selEdge === e.id ? ' sel' : ''));
+    svg.appendChild(line);
+
+    const hit = document.createElementNS(SVGNS, 'path');
+    hit.setAttribute('d', p.d);
+    hit.setAttribute('class', 'hit');
+    hit.onclick = () => { G.selEdge = e.id; G.sel = null; render(); };
+    svg.appendChild(hit);
+
+    const dot = document.createElementNS(SVGNS, 'circle');
+    dot.setAttribute('cx', p.tip[0]);
+    dot.setAttribute('cy', p.tip[1]);
+    dot.setAttribute('r', 3.5);
+    dot.setAttribute('class', 'tip' + (p.back ? ' back' : ''));
+    svg.appendChild(dot);
+
+    const tag = document.createElement('div');
+    tag.className = 'elabel' + (e.label ? '' : ' empty');
+    tag.style.left = p.mid[0] + 'px';
+    tag.style.top = p.mid[1] + 'px';
+    tag.textContent = e.label || '＋條件';
+    tag.onclick = ev => { ev.stopPropagation(); editLabel(e, tag); };
+    cv.appendChild(tag);
+  });
+}
+
+function editLabel(e, tag) {
+  const inp = document.createElement('input');
+  inp.value = e.label;
+  inp.placeholder = '例如：評分不足';
+  tag.textContent = '';
+  tag.appendChild(inp);
+  inp.focus();
+  const done = () => { e.label = inp.value.trim(); render(); };
+  inp.onblur = done;
+  inp.onkeydown = ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+    if (ev.key === 'Escape') { inp.value = e.label; inp.blur(); }
+    ev.stopPropagation();
+  };
+}
+
+/* ══════════ 互動 ══════════ */
+
+$('stage').ondragover = e => e.preventDefault();
+$('stage').ondrop = e => {
+  e.preventDefault();
+  const r = $('canvas').getBoundingClientRect();
+  addNode(e.dataTransfer.getData('text/plain'),
+          e.clientX - r.left - NODE_W / 2, e.clientY - r.top - NODE_H / 2);
+};
+
+function startDragNode(e, n, el) {
+  if (e.target.classList.contains('port') || e.target.classList.contains('x')) return;
+  e.preventDefault();
+  G.sel = n.id; G.selEdge = null;
+  el.classList.add('sel');
+  const r = $('canvas').getBoundingClientRect();
+  const dx = e.clientX - r.left - n.x, dy = e.clientY - r.top - n.y;
+
+  const move = ev => {
+    n.x = Math.max(0, ev.clientX - r.left - dx);
+    n.y = Math.max(0, ev.clientY - r.top - dy);
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    drawWires();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    render();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+function startDragWire(e, from) {
+  e.preventDefault();
+  e.stopPropagation();
+  const svg = $('wires'), r = $('canvas').getBoundingClientRect();
+  const A = anchors(from);
+  const temp = document.createElementNS(SVGNS, 'path');
+  temp.setAttribute('class', 'sel');
+  svg.appendChild(temp);
+
+  const move = ev => {
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    const dx = Math.max(50, Math.abs(x - A.ox) * 0.45);
+    temp.setAttribute('d', `M${A.ox},${A.oy} C${A.ox + dx},${A.oy} ${x - dx},${y} ${x},${y}`);
+  };
+  const up = ev => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    temp.remove();
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const host = el && el.closest ? el.closest('.node') : null;
+    if (host && host.dataset.id !== from.id) addEdge(from.id, host.dataset.id);
+    else render();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+$('canvas').onclick = e => {
+  if (e.target.id === 'canvas' || e.target.id === 'wires') {
+    G.sel = G.selEdge = null;
+    render();
+  }
+};
+
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  if (G.selEdge) { G.edges = G.edges.filter(x => x.id !== G.selEdge); G.selEdge = null; render(); }
+  else if (G.sel) removeNode(G.sel);
+});
+
+/* ══════════ 把圖讀成文字 ══════════ */
+
+/* 這段是整頁的重點。畫布只是草稿，這裡把它翻成人話 ——
+   翻不出來，表示這張圖其實沒說清楚任何事。 */
+function compile() {
+  const start = G.nodes.find(n => n.name === START);
+  const order = [], seen = {};
+  (function walk(id) {
+    if (seen[id]) return;
+    seen[id] = 1;
+    const n = nodeById(id);
+    if (n && n.name !== START && n.name !== ANSWER) order.push(id);
+    G.edges.filter(e => e.from === id).forEach(e => walk(e.to));
+  })(start.id);
+
+  const num = {};
+  order.forEach((id, i) => { num[id] = i + 1; });
+
+  const out = [];
+  const outsOf = id => G.edges.filter(e => e.from === id);
+  const say = to => {
+    const n = nodeById(to);
+    if (!n) return '？';
+    if (n.name === ANSWER) return '產生答案';
+    if (n.name === START) return '回到開頭';
+    return num[to] ? `第 ${num[to]} 步（${n.name}）` : `${n.name}（沒編號，走不到）`;
+  };
+
+  const first = outsOf(start.id);
+  out.push(first.length
+    ? `開頭 → ${first.map(e => (e.label ? `如果「${e.label}」→ ` : '') + say(e.to)).join('；')}`
+    : '開頭還沒接到任何模組。');
+
+  order.forEach(id => {
+    const n = nodeById(id);
+    out.push(`<b>第 ${num[id]} 步：呼叫 ${n.name}</b>　${META[n.name].description}`);
+    const outs = outsOf(id);
+    if (!outs.length) {
+      out.push('　 └ 這一步之後沒有連線 —— agent 做完不知道要幹嘛。');
+      return;
+    }
+    outs.forEach(e => {
+      const back = num[e.to] && num[e.to] <= num[id];
+      out.push('　 └ ' + (e.label ? `如果「${e.label}」→ ` : '') + say(e.to) +
+               (back ? '　<span class="warn">（折返）</span>' : ''));
+    });
+  });
+
+  const orphan = G.nodes.filter(n =>
+    n.name !== START && n.name !== ANSWER && !num[n.id]);
+  if (orphan.length) {
+    out.push('');
+    out.push('<span class="warn">從開頭走不到：' + orphan.map(n => n.name).join('、') +
+      '</span>　—— agent 還是拿得到這些工具，但沒有人告訴它什麼時候用。');
+  }
+
+  $('sCompiled').innerHTML = out.join('\n');
+
+  const hasMods = G.nodes.some(n => n.name !== START && n.name !== ANSWER);
+  const note = $('sNote');
+  if (hasMods && !$('sPolicy').value.trim()) {
+    note.classList.remove('hidden');
+    note.innerHTML = '<b>圖畫好了，但 agent 還是收不到它。</b>' +
+      'SDK 收的是模組清單加一段 system prompt —— 那段 prompt 就是下面的 policy。' +
+      'policy 空的話，這張圖上的每一條線都不存在。';
+  } else {
+    note.classList.add('hidden');
+  }
+}
+$('sPolicy').oninput = compile;
+
+/* 給 agent 看的版本：沒有 HTML，也不要編號以外的裝飾 */
+function compiledPlain() {
+  return $('sCompiled').textContent.trim();
+}
+
+/* ══════════ 載入 / 存檔 ══════════ */
+
+$('sFrom').onchange = () => {
+  const a = ARCHS.find(x => x.key === $('sFrom').value);
+  if (!a) { reset(); return; }
+  $('sName').value = a.name + '（改）';
+  $('sOrch').value = a.orchestration || '';
+  $('sPolicy').value = a.policy || '';
+
+  if (a.graph && a.graph.nodes) {
+    G.nodes = a.graph.nodes.map(n => ({ ...n }));
+    G.edges = (a.graph.edges || []).map(e => ({ ...e }));
+    G.seq = G.nodes.length + G.edges.length + 2;
+    G.sel = G.selEdge = null;
+    render();
+    say('載入畫布。改完存成新的一份。');
+    return;
+  }
+
+  // 沒畫過圖的架構：依階段排一排，但**不要幫它連線** ——
+  // 它的流程寫在 policy 裡，猜出來的連線會是假的。
+  reset();
+  const mods = (a.modules || []).concat(a.builtin_tools || []).filter(m => META[m]);
+  const col = {};
+  mods.forEach(m => {
+    const c = STAGES.findIndex(s => s.stage === META[m].stage);
+    col[c] = (col[c] || 0);
+    addNode(m, 300 + c * 250, 120 + col[c] * 110);
+    col[c]++;
+  });
+  say('這個架構的流程寫在 policy 裡，沒有畫過圖 —— 連線要你自己拉。');
+};
+
+$('sClear').onclick = () => { $('sFrom').value = ''; reset(); say(''); };
+
+function say(text, kind) {
+  $('sMsg').textContent = text;
+  $('sMsg').className = 'msg' + (kind ? ' ' + kind : '');
+}
+
+function spec() {
+  const mods = G.nodes.filter(n => META[n.name] && !META[n.name].builtin).map(n => n.name);
+  const builtin = G.nodes.filter(n => META[n.name] && META[n.name].builtin).map(n => n.name);
+  return {
+    name: $('sName').value.trim(),
+    orchestration: $('sOrch').value.trim() || 'Linear',
+    modules: [...new Set(mods)],
+    builtin_tools: [...new Set(builtin)],
+    max_turns: parseInt($('sTurns').value, 10) || 12,
+    policy: $('sPolicy').value.trim(),
+    why: '在 Studio 畫布上組出來的',
+    graph: { nodes: G.nodes, edges: G.edges },
+  };
+}
+
+$('sWrite').onclick = () => {
+  const s = spec();
+  if (!s.modules.length) return say('先拖至少一個模組進來', 'bad');
+  $('sWrite').disabled = true;
+  say('agent 正在照這張圖寫 policy…（20–40 秒）');
+  fetch('/api/architect/policy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      modules: s.modules, builtin_tools: s.builtin_tools,
+      note: '使用者在畫布上畫了這個流程，policy 要照著它寫：\n\n' + compiledPlain(),
+    }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+    .then(d => {
+      $('sPolicy').value = d.policy || '';
+      if (d.orchestration) $('sOrch').value = d.orchestration;
+      say(d.why || '寫好了', 'good');
+      compile();
+    })
+    .catch(err => say('失敗：' + err, 'bad'))
+    .finally(() => { $('sWrite').disabled = false; });
+};
+
+$('sSave').onclick = () => {
+  const s = spec();
+  if (!s.name) return say('先給它一個名字', 'bad');
+  if (!s.modules.length) return say('至少要一個模組', 'bad');
+  if (!s.policy) return say('policy 是空的 —— 那等於沒有編排', 'bad');
+  $('sSave').disabled = true;
+  say('存檔中…');
+  fetch('/api/architect/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(s),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '存檔失敗')))
+    .then(d => fetch('/api/architectures').then(r => r.json()).then(list => {
+      ARCHS = list;
+      $('sFrom').innerHTML = '<option value="">（空白）</option>' +
+        list.map(a => '<option value="' + a.key + '">' + esc(a.name) + '</option>').join('');
+      $('sFrom').value = d.key;
+      say('存好了。回主畫面就能選到它 —— 記得跟 Naive RAG 並排跑一題再相信它。', 'good');
+    }))
+    .catch(err => say('失敗：' + err, 'bad'))
+    .finally(() => { $('sSave').disabled = false; });
+};
+</script>
+</body>
+</html>

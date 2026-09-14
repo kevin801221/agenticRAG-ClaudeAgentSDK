@@ -263,7 +263,14 @@ def save(spec: dict) -> str:
         f = CUSTOM_DIR / f"{key}.json"
         n += 1
     f.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+    if spec.get("graph"):
+        GRAPHS[key] = spec["graph"]
     return key
+
+
+# 畫布上的節點座標與連線。它不是 Architecture 的一部分 —— Architecture 只有
+# 模組清單和 policy，圖純粹是給人看的草稿。所以分開放，不要污染那個 dataclass。
+GRAPHS: dict[str, dict] = {}
 
 
 def load_all() -> dict[str, Architecture]:
@@ -279,6 +286,8 @@ def load_all() -> dict[str, Architecture]:
                 print(f"[warn] 跳過 {f.name}：{why}")
                 continue
             out[f.stem] = to_architecture(spec)
+            if spec.get("graph"):
+                GRAPHS[f.stem] = spec["graph"]
         except Exception as exc:  # noqa: BLE001
             print(f"[warn] 跳過 {f.name}：{exc}")
     return out

@@ -192,41 +192,59 @@ uv run uvicorn app:app --reload
 > 這是 Adaptive-RAG 的「選型」升一層：Adaptive 替**一個問題**選路線，
 > 架構師替**一個使用情境**選架構。而且建議完可以馬上並排驗證 —— 建議與驗證在同一個畫面。
 
-### 自己拖一個：組裝台
+### Studio：畫布版組裝台（`/studio`）
 
-第三種做架構的方式（前兩種是手寫 JSON、跟架構師聊）。按「自己拖一個」：
+第三種做架構的方式（前兩種是手寫 JSON、跟架構師聊）。按「自己拖一個 ↗」開新分頁：
 
 ```
-模組庫    Indexing      [list_corpus]
-          Pre-retrieval [multi_search] [hyde_search]
-          Retrieval     [search] [WebSearch]
-          Post-retrieval[grade_documents] [expand] [diversify]
-              │ 拖
-              ▼
-你的架構  Indexing      ┆ （空著也可以）
-          Pre-retrieval ┆
-          Retrieval     ┆ [search ✕]
-          Post-retrieval┆ [grade_documents ✕] [diversify ✕]
+模組庫            畫布                                          右欄
+┌───────────┐   ┌──────────────────────────────────┐   ┌──────────────┐
+│list_corpus│   │ [問題進來]──▶[multi_search]        │   │ 這張圖的意思  │
+│multi_searc│──▶│                    │              │   │ ↓（自動翻譯） │
+│search     │拖 │                    ▼              │   │ policy       │
+│grade_docu │   │              [grade_documents]───▶│   │ ← 真正被執行  │
+│diversify  │   │                    ╰╌╌折返╌╌╯      │   │   的東西      │
+└───────────┘   └──────────────────────────────────┘   └──────────────┘
 ```
 
-丟錯車道會被擋下來，並告訴你「`grade_documents` 是 Post-retrieval 階段的模組」——
-階段分類本身就是 Modular RAG 的骨架，撞一次比講十次有用。
+從節點右邊的圓點拉到另一個節點就是一條連線，線上可以寫條件（「多數低於 1 分」）。
+**往回連的線會走底線並變成紅色虛線** —— 那就是折返，跟主畫面流程圖同一套視覺語言。
 
-**但這個畫面真正的重點是拖完之後那行紅字：**
+#### 但這一頁最重要的是標題列那句話
 
-> **模組有了，但它現在跟 Naive RAG 跑起來一模一樣。**
-> 模組只是「有這個能力」，agent 不知道什麼時候該用 —— 那是 policy 的事。
+> **這張圖不會被執行。被執行的是右邊那段 policy —— 圖只是幫你把它想清楚。**
 
-這是整套教材最容易被跳過的一層。市面上的「拖拉式 RAG builder」給你一張漂亮的流程圖，
-但**流程圖不是編排**，agent 不會因為你把方塊排好就照著跑。真正的編排是那段 policy 字串。
+這是 LangGraph 那類工具和這套東西最大的差別，也是整套教材最容易被跳過的一層：
+**在 LangGraph 裡，圖就是程式**，邊決定控制流；
+**在這裡，圖只是草稿**，真正交給 SDK 的是「模組清單 + 一段 system prompt」。
+所以畫布會把你畫的圖**編譯成文字**放在右欄，看不懂那段文字，就表示這張圖其實沒說清楚任何事：
 
-不想自己寫的話按「讓 agent 幫我寫」—— 它只做這一件事，而且常常會順便點出你這組模組的問題：
+```
+開頭 → 第 1 步（multi_search）
+第 1 步：呼叫 multi_search　RAG-Fusion：一次送多個不同角度的 query，結果用 RRF 融合。
+　 └ 第 2 步（grade_documents）
+第 2 步：呼叫 grade_documents　取回片段的完整內文，讓你評估夠不夠回答問題。
+　 └ 如果「有 2 分的片段」→ 產生答案
+　 └ 如果「多數低於 1 分」→ 第 1 步（multi_search）　（折返）
+```
 
-> 「一個明顯的缺口是 WebSearch 的結果沒有對應的評分模組（`grade_documents` 只能吃知識庫片段），
-> 所以外部證據只能靠雙來源這種比較粗的規則把關，可信度天生低一階。」
+沒接上的節點會被點名：「從開頭走不到：`diversify` —— agent 還是拿得到這個工具，
+但沒有人告訴它什麼時候用。」
 
-也可以「從現有架構開始改」—— 載入 CRAG、拿掉 `expand`、換成 `diversify`、重寫 policy、
-存成新的，再跟原版並排跑一題。**這就是這套教材希望學生養成的習慣：改一個地方，量一次。**
+按「照這張圖幫我寫 policy」，agent 收到的就是上面那段編譯出來的文字，寫出來的 policy
+會照著你畫的走（實測：邊上的條件字串會原封不動出現在 policy 的分流判斷裡）。
+它也常常順便點出這組模組的缺口：
+
+> 「折返時只能靠改寫 query 來改善結果，沒有 rerank 或 query 改寫的專用模組，
+> 所以 query 變異的責任全壓在 `multi_search` 的多角度設計上。」
+
+存檔時**圖和 policy 一起存**（節點座標進 `architectures/*.json` 的 `graph` 欄位），
+下次從「從現有架構開始」載回來畫布長得一模一樣。
+用 policy 手寫、沒畫過圖的架構載進來只會排好位置、**不會幫你連線** ——
+它的流程在 policy 裡，猜出來的連線是假的。
+
+**建議的用法：** 載入 CRAG → 改幾條線 → 重寫 policy → 存成新的 → 回主畫面跟原版並排跑一題。
+**改一個地方，量一次。**
 
 ### 並排比較：同一題同時跑兩三個架構
 
@@ -451,6 +469,7 @@ engines/
   litellm_loop.py    自寫的 tool loop，對照組
 app.py               FastAPI + SSE
 static/index.html    單檔前端，無建置
+static/studio.html   畫布版組裝台（/studio），也是單檔
 tests/               測試（27 項：檢索層 + 架構層）
 ```
 

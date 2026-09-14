@@ -48,6 +48,12 @@ async def home() -> FileResponse:
     return FileResponse(HERE / "static" / "index.html")
 
 
+@app.get("/studio")
+async def studio() -> FileResponse:
+    """畫布版的組裝台。獨立一頁是因為它要整個畫面 —— 塞在側欄裡拖不開。"""
+    return FileResponse(HERE / "static" / "studio.html")
+
+
 @app.get("/api/health")
 async def health() -> dict:
     return {
@@ -201,6 +207,8 @@ async def architectures() -> list[dict]:
             "builtin_tools": a.builtin_tools,
             "policy": a.policy.strip(),
             "custom": key.startswith("custom_"),
+            # 畫布的節點座標。只有在 studio 上組出來的架構才有；沒有的話前端自己排版
+            "graph": architect.GRAPHS.get(key),
         }
         for key, a in ARCHITECTURES.items()
     ]
