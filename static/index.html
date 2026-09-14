@@ -151,8 +151,35 @@
     box-shadow:0 2px 12px rgba(0,0,0,.45);max-width:100%}
   .pagewrap img{display:block;width:100%;height:auto;border-radius:3px}
   .tlayer{position:absolute;inset:0}
-  .tlayer span{position:absolute;color:transparent;white-space:pre;cursor:text;line-height:1}
-  .tlayer span::selection{background:rgba(242,180,65,.45)}
+  .tlayer span{position:absolute;color:transparent;white-space:pre;line-height:1}
+
+  /* ── 區域錨定框：在頁面上拖出一個可調整的矩形 ── */
+  .pagewrap.selectable{cursor:crosshair}
+  .sel{
+    position:absolute;border:2px solid var(--signal);background:rgba(242,180,65,.16);
+    box-shadow:0 0 0 9999px rgba(10,14,24,.34);   /* 框外壓暗，視線集中 */
+    cursor:move;
+  }
+  .sel .h{
+    position:absolute;width:11px;height:11px;background:var(--signal);
+    border:2px solid #1B1405;border-radius:2px;
+  }
+  .sel .h.nw{left:-6px;top:-6px;cursor:nwse-resize}
+  .sel .h.n {left:calc(50% - 5px);top:-6px;cursor:ns-resize}
+  .sel .h.ne{right:-6px;top:-6px;cursor:nesw-resize}
+  .sel .h.w {left:-6px;top:calc(50% - 5px);cursor:ew-resize}
+  .sel .h.e {right:-6px;top:calc(50% - 5px);cursor:ew-resize}
+  .sel .h.sw{left:-6px;bottom:-6px;cursor:nesw-resize}
+  .sel .h.s {left:calc(50% - 5px);bottom:-6px;cursor:ns-resize}
+  .sel .h.se{right:-6px;bottom:-6px;cursor:nwse-resize}
+  .sel .cnt{
+    position:absolute;left:0;top:-1.55rem;font-size:.72rem;font-family:var(--mono);
+    color:#1B1405;background:var(--signal);padding:.05rem .4rem;border-radius:3px;white-space:nowrap;
+  }
+  .anchor .thumb{
+    display:block;max-width:100%;max-height:130px;border:1px solid var(--rail);
+    border-radius:3px;margin-bottom:.4rem;background:#fff;
+  }
   .doctext{white-space:pre-wrap;font-size:.95rem;line-height:1.75}
   .doctext h4{margin:1.2rem 0 .3rem;font-size:.88rem;color:var(--signal);font-family:var(--mono)}
   .doctext ::selection,.doctext::selection{background:rgba(242,180,65,.42)}
@@ -355,7 +382,7 @@
         <button type="button" id="pageNext" title="下一頁">›</button>
         <button type="button" id="docClose">關閉文件</button>
       </div>
-      <p class="dochint">用滑鼠圈選任何一段，右邊就會錨定它 —— 接著直接問。</p>
+      <p class="dochint" id="docHint">在頁面上拖一個框（可以再調整大小、拖動），框裡的內容就會錨定到右邊 —— 接著直接問。</p>
       <div id="docBody"></div>
     </div>
   </section>
@@ -374,7 +401,7 @@
       <h2>問這份文件</h2>
       <div class="chatlog" id="chatLog"></div>
       <div class="anchor hidden" id="anchorBox">
-        <div class="txt"><span class="lbl">已錨定這段</span><span id="anchorText"></span></div>
+        <div class="txt"><span class="lbl">已錨定這一區</span><img class="thumb hidden" id="anchorThumb" alt="框選區域預覽"><span id="anchorText"></span></div>
         <button class="x" type="button" id="anchorClear" title="取消錨定">✕</button>
       </div>
       <form id="docForm">
@@ -880,6 +907,9 @@ function renderDoc() {
  *  Chrome 內建的 PDF 檢視器是獨立程序，外面碰不到它的選取，所以才要自己疊。 */
 function layoutWords(wrap, d) {
   const scale = wrap.clientWidth / d.width;      // PDF point → CSS px
+  DOC.words = d.words;                            // 給區域錨定算「框裡有哪些字」
+  DOC.scale = scale;
+  wrap.classList.add('selectable');
   const layer = document.createElement('div');
   layer.className = 'tlayer';
   let lastLine = null;
@@ -905,31 +935,171 @@ window.addEventListener('resize', () => {
 
 let anchorText = '';
 
-function clearAnchor(keepSelection) {
+function clearAnchor() {
   anchorText = '';
   $('anchorBox').classList.add('hidden');
   $('anchorText').textContent = '';
-  // 連 DOM 的選取一起清掉，否則下一次 mouseup 會把同一段再錨定一次
-  if (!keepSelection) { try { window.getSelection().removeAllRanges(); } catch (e) {} }
+  $('anchorThumb').classList.add('hidden');
+  clearRegion();
+  try { window.getSelection().removeAllRanges(); } catch (e) {}
 }
 
 $('anchorClear').onclick = clearAnchor;
 
-$('docView').addEventListener('mouseup', e => {
-  // 只有在文字上放開滑鼠才算圈選。少了這個判斷，任何一次 mouseup
-  // 都會把殘留的選取重新錨定一次 —— 送出之後錨定框會自己冒回來。
-  if (!e.target.closest('.tlayer, .doctext')) return;
+/* 區域錨定：在 PDF 頁面上拖出一個可調整的方框，框裡的字就是錨定內容。
+   為什麼不用瀏覽器的文字選取：PDF 的文字層是我們自己疊的一堆小方塊，
+   跨欄、跨圖時選取會亂跑；而且論文常常要框的是「一張圖 + 它的說明」，
+   那本來就是一塊區域，不是一段連續文字。 */
+
+let SEL = null;        // {x, y, w, h} 以 CSS px 為單位，相對 pagewrap
+
+function clearRegion() {
+  SEL = null;
+  const box = document.querySelector('.sel');
+  if (box) box.remove();
+}
+
+function ensureSelBox() {
+  let box = document.querySelector('.sel');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'sel';
+    box.innerHTML = '<span class="cnt"></span>' +
+      ['nw','n','ne','w','e','sw','s','se'].map(k => '<i class="h ' + k + '" data-h="' + k + '"></i>').join('');
+    ($('pageWrap') || $('docBody')).appendChild(box);
+  }
+  return box;
+}
+
+function drawSel() {
+  if (!SEL) return;
+  const box = ensureSelBox();
+  box.style.left = SEL.x + 'px';
+  box.style.top = SEL.y + 'px';
+  box.style.width = SEL.w + 'px';
+  box.style.height = SEL.h + 'px';
+}
+
+/** 框裡有哪些字 —— 以字的中心點是否落在框內判斷 */
+function wordsInSel() {
+  if (!SEL || !DOC.words) return '';
+  const sc = DOC.scale;
+  const picked = DOC.words.filter(w => {
+    const cx = (w.x + w.w / 2) * sc, cy = (w.y + w.h / 2) * sc;
+    return cx >= SEL.x && cx <= SEL.x + SEL.w && cy >= SEL.y && cy <= SEL.y + SEL.h;
+  });
+  let out = '', lastLine = null;
+  for (const w of picked) {
+    if (lastLine !== null && w.line !== lastLine) out += '\n';
+    else if (out) out += ' ';
+    out += w.t;
+    lastLine = w.line;
+  }
+  return out.trim();
+}
+
+/** 把框住的那塊裁成縮圖，讓使用者確認自己框到什麼 */
+function cropThumb() {
+  const img = $('pageImg');
+  if (!img || !SEL) return '';
+  const r = img.naturalWidth / img.clientWidth;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(SEL.w * r));
+  c.height = Math.max(1, Math.round(SEL.h * r));
+  c.getContext('2d').drawImage(img, SEL.x * r, SEL.y * r, c.width, c.height, 0, 0, c.width, c.height);
+  try { return c.toDataURL('image/png'); } catch (e) { return ''; }
+}
+
+function commitAnchor() {
+  if (!SEL || SEL.w < 8 || SEL.h < 8) { clearRegion(); clearAnchor(); return; }
+  const text = wordsInSel();
+  const box = ensureSelBox();
+  box.querySelector('.cnt').textContent = text ? (text.split(/\s+/).length + ' 個詞') : '沒有文字';
+
+  anchorText = text.slice(0, 4000);
+  const thumb = cropThumb();
+  $('anchorText').textContent = text ||
+    '（這一區沒有抓到文字，可能是圖或表格。可以連圖說一起框，或直接描述你想問什麼。）';
+  const t = $('anchorThumb');
+  if (thumb) { t.src = thumb; t.classList.remove('hidden'); } else { t.classList.add('hidden'); }
+  $('anchorBox').classList.remove('hidden');
+  $('docQ').focus();
+}
+
+/* 拖曳：畫新框 / 移動 / 縮放，共用同一組 pointer 事件 */
+(function () {
+  let mode = null, handle = null, start = null, orig = null;
+
+  const wrapOf = () => $('pageWrap');
+  const local = e => {
+    const r = wrapOf().getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top, mw: r.width, mh: r.height };
+  };
+
+  $('docBody').addEventListener('mousedown', e => {
+    if (!DOC.isPdf || !wrapOf()) return;
+    const h = e.target.closest('.h');
+    const inBox = e.target.closest('.sel');
+    if (!h && !inBox && !e.target.closest('.pagewrap')) return;
+    e.preventDefault();
+
+    start = local(e);
+    orig = SEL ? { ...SEL } : null;
+    if (h) { mode = 'resize'; handle = h.dataset.h; }
+    else if (inBox) { mode = 'move'; }
+    else { mode = 'draw'; SEL = { x: start.x, y: start.y, w: 0, h: 0 }; drawSel(); }
+    document.body.classList.add('resizing');
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!mode) return;
+    const p = local(e);
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+    if (mode === 'draw') {
+      SEL = {
+        x: Math.min(start.x, p.x), y: Math.min(start.y, p.y),
+        w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y),
+      };
+    } else if (mode === 'move') {
+      SEL.x = clamp(orig.x + (p.x - start.x), 0, p.mw - orig.w);
+      SEL.y = clamp(orig.y + (p.y - start.y), 0, p.mh - orig.h);
+    } else if (mode === 'resize') {
+      const dx = p.x - start.x, dy = p.y - start.y;
+      let { x, y, w, h } = orig;
+      if (handle.includes('w')) { x = orig.x + dx; w = orig.w - dx; }
+      if (handle.includes('e')) { w = orig.w + dx; }
+      if (handle.includes('n')) { y = orig.y + dy; h = orig.h - dy; }
+      if (handle.includes('s')) { h = orig.h + dy; }
+      if (w < 12) { w = 12; }
+      if (h < 12) { h = 12; }
+      SEL = { x: clamp(x, 0, p.mw - 12), y: clamp(y, 0, p.mh - 12), w: w, h: h };
+    }
+    // 不要超出頁面
+    SEL.w = Math.min(SEL.w, p.mw - SEL.x);
+    SEL.h = Math.min(SEL.h, p.mh - SEL.y);
+    drawSel();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!mode) return;
+    mode = null; handle = null;
+    document.body.classList.remove('resizing');
+    commitAnchor();
+  });
+})();
+
+/* markdown 語料沒有座標，維持原本的文字選取 */
+$('docBody').addEventListener('mouseup', e => {
+  if (DOC.isPdf || !e.target.closest('.doctext')) return;
   setTimeout(() => {
     const sel = window.getSelection();
     if (!sel.rangeCount) return;
-    const node = sel.anchorNode;
-    const el = node && (node.nodeType === 1 ? node : node.parentNode);
-    if (!el || !$('docView').contains(el)) return;      // 選取必須在文件裡
-
-    const t = (sel.toString() || '').replace(/[ \t]+\n/g, '\n').trim();
-    if (t.length < 2) return;                           // 點一下不算圈選
+    const t = (sel.toString() || '').trim();
+    if (t.length < 2) return;
     anchorText = t.slice(0, 4000);
     $('anchorText').textContent = anchorText;
+    $('anchorThumb').classList.add('hidden');
     $('anchorBox').classList.remove('hidden');
     $('docQ').focus();
   }, 10);
