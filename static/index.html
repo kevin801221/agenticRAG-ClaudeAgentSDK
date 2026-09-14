@@ -354,6 +354,60 @@
 
   footer{border-top:1px solid var(--rail);background:var(--panel);padding:1rem 1.5rem}
   footer > details > summary{padding:0;font-size:.9rem;color:var(--ink)}
+  /* ── 整頁拖放遮罩 ── */
+  .dropzone{
+    position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+    background:rgba(10,14,24,.86);backdrop-filter:blur(2px);
+    border:3px dashed var(--signal);border-radius:8px;pointer-events:none;
+  }
+  .dropzone .box{text-align:center}
+  .dropzone .big{font-size:1.5rem;font-weight:600;color:var(--signal);margin-bottom:.4rem}
+  .dropzone .sub{color:var(--muted);font-size:.9rem}
+
+  /* ── 匯入佇列（右下角浮動）── */
+  .jobs{
+    position:fixed;right:1rem;bottom:1rem;z-index:80;width:min(400px,calc(100vw - 2rem));
+    background:var(--panel);border:1px solid var(--rail);border-radius:7px;
+    box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden;
+  }
+  .jobs-head{
+    display:flex;align-items:center;gap:.6rem;padding:.5rem .8rem;background:var(--panel-2);
+    font-size:.85rem;cursor:pointer;
+  }
+  .jobs-head .t{flex:1;font-weight:600}
+  .jobs-head button{
+    padding:.1rem .5rem;font-size:.75rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail);
+  }
+  .jobs-head button:hover{color:var(--ink);border-color:var(--signal)}
+  .jobs-body{max-height:min(46vh,420px);overflow-y:auto;padding:.5rem .8rem .7rem}
+  .jobs.min .jobs-body{display:none}
+
+  .job{padding:.5rem 0;border-top:1px solid var(--rail)}
+  .job:first-child{border-top:0}
+  .job .jname{display:flex;align-items:center;gap:.5rem;font-size:.86rem}
+  .job .jname b{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .job .jstat{
+    font-family:var(--mono);font-size:.7rem;padding:.05rem .4rem;border-radius:2px;
+    border:1px solid currentColor;color:var(--muted);flex-shrink:0;
+  }
+  .job.run .jstat{color:var(--signal)}
+  .job.ok .jstat{color:var(--ok)}
+  .job.err .jstat{color:var(--alert)}
+  .job .jstep{font-size:.78rem;color:var(--muted);margin-top:.2rem}
+  .job.err .jstep{color:var(--alert)}
+  .job .jplan{
+    margin-top:.35rem;padding:.4rem .6rem;font-size:.78rem;line-height:1.55;
+    border-left:2px solid var(--signal);background:rgba(242,180,65,.07);border-radius:0 3px 3px 0;
+  }
+  .job .jplan code{font-family:var(--mono);color:var(--ink)}
+
+  .addbtn{
+    padding:.2rem .7rem;font-size:.78rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail);border-radius:3px;cursor:pointer;
+  }
+  .addbtn:hover{border-color:var(--signal);color:var(--signal)}
+
   /* ── 上傳區 ── */
   .drop{
     border:1.5px dashed var(--rail);border-radius:6px;padding:.9rem 1rem;margin:.8rem 0;
@@ -408,6 +462,7 @@
   <h1>Agentic RAG</h1>
   <span class="sub">檢索策略由模型當場決定 —— 上面是流程，右邊是它的判斷理由</span>
   <span class="spacer"></span>
+  <button class="addbtn" type="button" id="addDoc" title="也可以直接把檔案拖到頁面上">＋ 加文件</button>
   <span class="badge" id="corpus">載入中</span>
   <span class="badge" id="engine">—</span>
 </header>
@@ -483,6 +538,22 @@
   </section>
 </main>
 
+<div class="dropzone hidden" id="dropOverlay">
+  <div class="box">
+    <div class="big">放開就開始匯入</div>
+    <div class="sub"><span id="dropCount"></span>　agent 會逐份判斷怎麼切，一次處理一份</div>
+  </div>
+</div>
+
+<div class="jobs hidden" id="jobs">
+  <div class="jobs-head" id="jobsHead">
+    <span class="t">匯入佇列 <span id="jobsCount"></span></span>
+    <button type="button" id="jobsClear">清除完成</button>
+    <button type="button" id="jobsMin">—</button>
+  </div>
+  <div class="jobs-body" id="jobsBody"></div>
+</div>
+
 <footer>
   <details id="notesPanel">
     <summary>筆記本 <span id="notesCount"></span></summary>
@@ -497,11 +568,11 @@
 
     <div class="drop" id="drop">
       <button type="button" id="pickFile">選擇檔案</button>
-      <span class="hint">或把檔案拖進來。<code>.md</code> <code>.txt</code> <code>.pdf</code>，最大 40 MB ——
-        <strong>agent 會自己看過內容決定怎麼切、要不要補脈絡</strong>，切完併進語料庫就能被檢索到。</span>
+      <span class="hint"><strong>或直接把檔案拖到頁面任何地方</strong>（可以一次丟多份，會排隊處理）。
+        <code>.md</code> <code>.txt</code> <code>.pdf</code>，單檔最大 40 MB ——
+        agent 會逐份看過內容決定怎麼切、要不要補脈絡，切完併進語料庫就能被檢索到。</span>
       <input type="file" id="fileInput" accept=".md,.txt,.pdf" hidden>
     </div>
-    <div class="ingest" id="ingestLog"></div>
 
     <div class="corpus" id="corpusList"></div>
   </details>
@@ -897,86 +968,154 @@ function loadCorpus() {
 }
 loadCorpus();
 
-/* ══════════ 上傳 → agent 決定怎麼切 → 併進語料庫 ══════════ */
+/* ══════════ 匯入：整頁拖放 + 批次佇列 ══════════ */
 
-(function () {
-  const drop = $('drop'), input = $('fileInput'), log = $('ingestLog');
-  let busy = false;
+/* 一次只跑一份 —— 每份都要 LLM 判斷 + 向量化，平行送只會互相排隊還更難看進度。
+   佇列讓使用者可以一次丟十份就走人。 */
 
-  $('pickFile').onclick = () => input.click();
-  input.onchange = () => { if (input.files[0]) upload(input.files[0]); input.value = ''; };
+const JOBS = [];
+let jobRunning = false;
+let jobSeq = 0;
 
-  ['dragenter', 'dragover'].forEach(ev =>
-    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach(ev =>
-    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', e => {
-    const f = e.dataTransfer.files[0];
-    if (f) upload(f);
-  });
+function jobsRender() {
+  const box = $('jobs');
+  box.classList.toggle('hidden', JOBS.length === 0);
+  const left = JOBS.filter(j => j.state === 'wait' || j.state === 'run').length;
+  $('jobsCount').textContent = left ? `（還有 ${left} 份）` : `（${JOBS.length} 份完成）`;
 
-  function line(text, cls) {
-    const d = document.createElement('div');
-    d.className = 'line ' + (cls || '');
-    d.textContent = text;
-    log.appendChild(d);
-    return d;
+  $('jobsBody').innerHTML = JOBS.map(j => {
+    const label = { wait: '等待中', run: j.stage || '處理中', ok: '完成', err: '失敗' }[j.state];
+    return '<div class="job ' + (j.state === 'run' ? 'run' : j.state === 'ok' ? 'ok' : j.state === 'err' ? 'err' : '') + '">' +
+      '<div class="jname"><b>' + esc(j.name) + '</b><span class="jstat">' + esc(label) + '</span></div>' +
+      (j.step ? '<div class="jstep">' + esc(j.step) + '</div>' : '') +
+      (j.plan ? '<div class="jplan">' +
+        '<code>' + esc(j.plan.strategy) + '</code>　每塊 ' + j.plan.max_chars + ' 字　補脈絡 ' +
+        (j.plan.context_prefix ? '是' : '否') + '<br>' + esc(j.plan.reason) + '</div>' : '') +
+      '</div>';
+  }).join('');
+}
+
+function enqueue(files) {
+  const ok = [...files].filter(f => /\.(md|txt|pdf)$/i.test(f.name));
+  const bad = [...files].length - ok.length;
+  ok.forEach(f => JOBS.push({ id: ++jobSeq, name: f.name, file: f, state: 'wait', step: '', plan: null }));
+  if (bad) {
+    JOBS.push({ id: ++jobSeq, name: `${bad} 個檔案被略過`, state: 'err',
+                step: '只收 .md / .txt / .pdf', plan: null });
   }
+  $('jobs').classList.remove('min');
+  jobsRender();
+  pump();
+}
 
-  function upload(file) {
-    if (busy) return;
-    busy = true;
-    log.innerHTML = '';
-    const first = line('上傳 ' + file.name + ' …', 'now');
+async function pump() {
+  if (jobRunning) return;
+  const job = JOBS.find(j => j.state === 'wait');
+  if (!job) return;
+  jobRunning = true;
+  job.state = 'run';
+  job.stage = '上傳中';
+  jobsRender();
 
+  try {
     const fd = new FormData();
-    fd.append('file', file);
-    fetch('/api/upload', { method: 'POST', body: fd })
-      .then(r => r.json().then(j => r.ok ? j : Promise.reject(j.detail || '上傳失敗')))
-      .then(up => {
-        first.className = 'line';
-        first.textContent = '已上傳 ' + up.path + '（' + Math.round(up.bytes / 1024) + ' KB）' +
-          (up.replaced ? ' · 會覆蓋同名的舊版本' : '');
-        ingest(up.path);
-      })
-      .catch(err => { first.className = 'line fail'; first.textContent = '失敗：' + err; busy = false; });
+    fd.append('file', job.file);
+    const up = await fetch('/api/upload', { method: 'POST', body: fd })
+      .then(r => r.json().then(j => r.ok ? j : Promise.reject(j.detail || '上傳失敗')));
+    job.step = up.replaced ? '會覆蓋同名的舊版本' : `${Math.round(up.bytes / 1024)} KB`;
+    job.stage = '判斷中';
+    jobsRender();
+    await runIngest(job, up.path);
+  } catch (err) {
+    job.state = 'err';
+    job.step = String(err);
   }
+  job.file = null;            // 放掉檔案，不要一直佔記憶體
+  jobRunning = false;
+  jobsRender();
+  pump();                     // 接著跑下一份
+}
 
-  function ingest(path) {
-    let now = line('agent 正在看這份文件…', 'now');
+function runIngest(job, path) {
+  return new Promise(resolve => {
     const es = new EventSource('/api/ingest?path=' + encodeURIComponent(path));
-
     es.onmessage = m => {
       const ev = JSON.parse(m.data);
       if (ev.type === 'step') {
-        now.className = 'line';
-        now = line(ev.text, 'now');
+        job.step = ev.text;
+        job.stage = /向量化/.test(ev.text) ? '向量化'
+                  : /脈絡/.test(ev.text) ? '補脈絡'
+                  : /切出/.test(ev.text) ? '切塊' : job.stage;
       } else if (ev.type === 'plan') {
-        const p = ev.plan;
-        const dl = document.createElement('dl');
-        dl.className = 'plan';
-        dl.innerHTML =
-          '<dt>文件類型</dt><dd>' + esc(p.doc_type) + '</dd>' +
-          '<dt>切法</dt><dd><code>' + esc(p.strategy) + '</code>　每塊上限 <code>' +
-            p.max_chars + '</code> 字　補脈絡 <code>' + (p.context_prefix ? '是' : '否') + '</code></dd>' +
-          '<dt>為什麼</dt><dd>' + esc(p.reason) + '</dd>';
-        log.insertBefore(dl, now);
+        job.plan = ev.plan;
+        job.stage = '切塊';
       } else if (ev.type === 'done') {
-        now.className = 'line';
-        line('完成：新增 ' + ev.added + ' 個片段 → 語料庫現在有 ' +
-             ev.chunks + ' 片段 / ' + ev.files + ' 檔案');
-        es.close(); busy = false;
-        loadCorpus();
-        refreshHealth();
+        job.state = 'ok';
+        job.step = `新增 ${ev.added} 個片段 → 語料庫 ${ev.chunks} 片段 / ${ev.files} 檔案`;
+        es.close(); loadCorpus(); refreshHealth(); jobsRender(); resolve();
       } else if (ev.type === 'error') {
-        now.className = 'line fail';
-        now.textContent = '失敗：' + ev.text;
-        es.close(); busy = false;
+        job.state = 'err';
+        job.step = ev.text;
+        es.close(); jobsRender(); resolve();
       }
+      jobsRender();
     };
-    es.onerror = () => { es.close(); busy = false; };
-  }
+    es.onerror = () => {
+      if (job.state === 'run') { job.state = 'err'; job.step = '連線中斷'; }
+      es.close(); jobsRender(); resolve();
+    };
+  });
+}
+
+/* ── 入口一：header 的「＋ 加文件」（常駐，找得到） ── */
+$('addDoc').onclick = () => $('fileInput').click();
+$('pickFile').onclick = () => $('fileInput').click();
+$('fileInput').onchange = () => {
+  if ($('fileInput').files.length) enqueue($('fileInput').files);
+  $('fileInput').value = '';
+};
+
+/* ── 入口二：整頁拖放 ── */
+(function () {
+  const overlay = $('dropOverlay');
+  let depth = 0;                 // dragenter/leave 會在子元素間反覆觸發，要自己數
+
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+
+  window.addEventListener('dragenter', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth++;
+    const n = e.dataTransfer.items ? e.dataTransfer.items.length : 0;
+    $('dropCount').textContent = n ? `${n} 個檔案` : '';
+    overlay.classList.remove('hidden');
+  });
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', e => {
+    if (!hasFiles(e)) return;
+    if (--depth <= 0) { depth = 0; overlay.classList.add('hidden'); }
+  });
+  window.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    overlay.classList.add('hidden');
+    if (e.dataTransfer.files.length) enqueue(e.dataTransfer.files);
+  });
 })();
+
+/* ── 佇列面板 ── */
+$('jobsHead').onclick = e => {
+  if (e.target.tagName === 'BUTTON') return;
+  $('jobs').classList.toggle('min');
+};
+$('jobsMin').onclick = () => $('jobs').classList.toggle('min');
+$('jobsClear').onclick = () => {
+  for (let i = JOBS.length - 1; i >= 0; i--) {
+    if (JOBS[i].state === 'ok' || JOBS[i].state === 'err') JOBS.splice(i, 1);
+  }
+  jobsRender();
+};
 
 /* ══════════ 筆記本 ══════════ */
 

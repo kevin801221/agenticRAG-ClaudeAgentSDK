@@ -233,8 +233,12 @@ async def add_context(chunks: list[Chunk], rel: str, plan: dict, emit: Emit) -> 
 
 
 async def ingest(path: Path, rel: str, data_dir: Path, existing: list[Chunk],
-                 embedding: str, emit: Emit) -> dict:
-    """完整流程：規劃 → 切塊 → 補脈絡 → 向量化 → 併進語料庫。"""
+                 old_vectors, embedding: str, emit: Emit) -> dict:
+    """完整流程：規劃 → 切塊 → 補脈絡 → 向量化 → 併進語料庫。
+
+    **只向量化新片段**，舊的向量直接沿用。批次上傳十份文件時，
+    全量重算會變成十次完整 embedding —— 那是這個功能會不會好用的分水嶺。
+    """
     from datetime import datetime
 
     plan = await make_plan(path, emit)
@@ -247,12 +251,20 @@ async def ingest(path: Path, rel: str, data_dir: Path, existing: list[Chunk],
     if plan.get("context_prefix"):
         await add_context(chunks, rel, plan, emit)
 
-    merged = [c for c in existing if c.path != rel] + chunks   # 同名就覆蓋
+    keep = [i for i, c in enumerate(existing) if c.path != rel]   # 同名就覆蓋
+    merged = [existing[i] for i in keep] + chunks
+
     vectors = None
     if embedding == "local":
-        emit({"type": "step", "text": f"向量化 {len(merged)} 個片段…"})
+        emit({"type": "step", "text": f"向量化 {len(chunks)} 個新片段（舊的沿用）…"})
         encode = load_encoder(DEFAULT_EMBEDDING_MODEL)
-        vectors = np.asarray(encode([embed_text(c) for c in merged]), dtype="float32")
+        fresh = np.asarray(encode([embed_text(c) for c in chunks]), dtype="float32")
+        if old_vectors is not None and len(old_vectors) == len(existing):
+            vectors = np.vstack([np.asarray(old_vectors)[keep], fresh]) if keep else fresh
+        else:
+            # 對不起來就整批重算，總比算出錯位的向量好
+            emit({"type": "step", "text": "舊向量對不上片段數，整批重算"})
+            vectors = np.asarray(encode([embed_text(c) for c in merged]), dtype="float32")
 
     save_index(data_dir, merged, vectors, datetime.now().isoformat(timespec="seconds"))
     emit({"type": "step", "text": "索引已更新"})

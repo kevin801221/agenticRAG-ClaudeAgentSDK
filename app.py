@@ -259,8 +259,9 @@ async def ingest_doc(path: str) -> StreamingResponse:
     async def worker() -> None:
         global INDEX
         try:
+            old_vecs = INDEX.store.matrix if getattr(INDEX.store, "kind", "") == "numpy" else None
             result = await ING.ingest(
-                target, path, HERE / "data", list(INDEX.chunks),
+                target, path, HERE / "data", list(INDEX.chunks), old_vecs,
                 os.getenv("EMBEDDING", "local"), emit,
             )
             # 重新載入，讓新片段立刻可以被檢索到
