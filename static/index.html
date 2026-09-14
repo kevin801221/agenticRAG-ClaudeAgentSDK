@@ -289,6 +289,37 @@
   }
   .chip:hover{border-color:var(--signal);color:var(--ink)}
 
+  /* ── 重播 ── */
+  .replaybar{
+    display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem;
+    padding:.45rem .7rem;border:1px solid var(--signal);border-radius:5px;
+    background:rgba(242,180,65,.07);font-size:.82rem;
+  }
+  .replaybar button{padding:.15rem .7rem;font-size:.8rem;font-weight:400;align-self:auto}
+  .replaybar .ghost{background:none;color:var(--muted);border:1px solid var(--rail)}
+  .replaybar .ghost:hover{color:var(--ink);border-color:var(--signal)}
+  .replaybar select{flex:0 0 auto;min-width:8rem;font-size:.8rem;padding:.15rem .4rem}
+  .replaybar .pos{font-family:var(--mono);color:var(--muted);flex:1;min-width:7rem;font-size:.75rem}
+  .replaybar .tag{font-family:var(--mono);font-size:.7rem;color:var(--signal);
+    border:1px solid currentColor;border-radius:2px;padding:.02rem .35rem}
+
+  .tracelist{display:flex;flex-direction:column;gap:.5rem}
+  .trace-item{
+    border:1px solid var(--rail);border-radius:5px;padding:.55rem .75rem;
+    background:var(--panel-2);cursor:pointer;
+  }
+  .trace-item:hover{border-color:var(--signal)}
+  .trace-item .q{font-size:.9rem;font-weight:600;margin-bottom:.15rem}
+  .trace-item .m{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+  .trace-item .p{font-size:.8rem;color:var(--muted);margin-top:.25rem;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trace-item .row{display:flex;gap:.4rem;margin-top:.4rem}
+  .trace-item .row button{padding:.1rem .5rem;font-size:.72rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .trace-item .row button:hover{color:var(--ink);border-color:var(--signal)}
+  .trace-item.pinned{border-color:var(--ok)}
+  .trace-item.pinned .m::before{content:"釘選 · ";color:var(--ok)}
+
   /* ── 架構師 ── */
   .archbtn{
     padding:.2rem .7rem;font-size:.78rem;font-weight:400;align-self:auto;
@@ -547,6 +578,7 @@
       <div class="archinfo" id="archinfo"></div>
       <div class="cmpbar">
         <button type="button" class="archbtn" id="openArchitect">讓 agent 幫我組一個</button>
+        <button type="button" class="archbtn" id="openReplay">重播</button>
         <label><input type="checkbox" id="cmpOn"> 並排比較</label>
         <select id="arch2" class="hidden"></select>
         <select id="arch3" class="hidden"></select>
@@ -580,6 +612,28 @@
        aria-label="調整左右兩區寬度" tabindex="0"></div>
 
   <section class="col">
+    <div class="replaybar hidden" id="replayBar">
+      <span class="tag">重播</span>
+      <button type="button" id="rpPlay">暫停</button>
+      <button type="button" class="ghost" id="rpStep">下一步</button>
+      <select id="rpSpeed" aria-label="重播速度">
+        <option value="compress">壓縮等待</option>
+        <option value="1">原速</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="0">立刻跑完</option>
+      </select>
+      <span class="pos" id="rpPos"></span>
+      <button type="button" class="ghost" id="rpAgain">重來</button>
+      <button type="button" class="ghost" id="rpExit">離開重播</button>
+    </div>
+
+    <div id="replayView" class="hidden">
+      <h2>軌跡重播 — 不呼叫 LLM，秒開</h2>
+      <p class="empty" id="replayHint">每次問答都會自動錄下來。挑一次最漂亮的釘選，上課就放那一份。</p>
+      <div class="tracelist" id="traceList"></div>
+    </div>
+
     <div id="traceView">
       <h2>決策軌跡</h2>
       <div class="trace" id="trace"></div>
@@ -928,6 +982,7 @@ $('form').onsubmit = ev => { ev.preventDefault(); ask($('q').value.trim()); };
 
 function ask(question) {
   if (!question) return;
+  if (PLAY.trace) exitReplay();
   lastQuestion = question;
   lastAnswer = '';
   trace.innerHTML = '';
@@ -1057,6 +1112,177 @@ function loadCorpus() {
  });
 }
 loadCorpus();
+
+/* ══════════ 軌跡重播 ══════════ */
+
+/* 重播餵的是**同一組事件**，所以直接呼叫原本的 handle() / cmpHandle() ——
+   不寫第二套渲染邏輯，也保證你重播看到的跟當初真的跑出來的一模一樣。
+   那兩個函式只用 es.close()，所以塞一個假的 es 進去就好。 */
+
+const PLAY = { trace: null, i: 0, timer: null, playing: false };
+const FAKE_ES = { close() {} };
+
+$('openReplay').onclick = () => {
+  ['traceView', 'cmpView', 'docChat', 'architectView'].forEach(id => $(id).classList.add('hidden'));
+  $('replayView').classList.remove('hidden');
+  loadTraces();
+};
+
+function loadTraces() {
+  fetch('/api/traces').then(r => r.json()).then(list => {
+    $('replayHint').style.display = list.length ? 'none' : '';
+    $('traceList').innerHTML = '';
+    list.forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'trace-item' + (t.pinned ? ' pinned' : '');
+      d.innerHTML =
+        '<div class="q">' + esc(t.question) + '</div>' +
+        '<div class="m">' + esc(t.created_at) + '　·　' + esc(t.archs.join(' vs ')) +
+          '　·　' + t.calls + ' 次呼叫　·　' + (t.ms / 1000).toFixed(1) + ' 秒</div>' +
+        (t.preview ? '<div class="p">' + esc(t.preview) + '</div>' : '') +
+        '<div class="row"></div>';
+      d.onclick = e => { if (e.target.tagName !== 'BUTTON') startReplay(t.id); };
+
+      const row = d.querySelector('.row');
+      const pin = document.createElement('button');
+      pin.type = 'button';
+      pin.textContent = t.pinned ? '取消釘選' : '釘選';
+      pin.title = '釘選的不會被自動清掉';
+      pin.onclick = () => fetch('/api/traces/' + t.id + '/pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned: !t.pinned }),
+      }).then(loadTraces);
+      row.appendChild(pin);
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = '刪除';
+      del.onclick = () => fetch('/api/traces/' + t.id, { method: 'DELETE' }).then(loadTraces);
+      row.appendChild(del);
+
+      $('traceList').appendChild(d);
+    });
+  });
+}
+
+function startReplay(tid) {
+  fetch('/api/traces/' + tid).then(r => r.json()).then(t => {
+    PLAY.trace = t;
+    PLAY.i = 0;
+    $('replayView').classList.add('hidden');
+    $('replayBar').classList.remove('hidden');
+    $('q').value = t.question;
+    lastQuestion = t.question;
+    lastAnswer = '';
+
+    // 架構要跟著切回去，不然流程圖會照現在選的那個畫，重播就對不上了
+    if (t.archs[0] && $('arch').querySelector('option[value="' + t.archs[0] + '"]')) {
+      $('arch').value = t.archs[0];
+      showArch();
+    }
+
+    if (t.mode === 'compare') {
+      $('traceView').classList.add('hidden');
+      $('cmpView').classList.remove('hidden');
+      setPipeOpen(false);
+      cmpPrepare(t.archs);
+    } else {
+      $('cmpView').classList.add('hidden');
+      $('traceView').classList.remove('hidden');
+      trace.innerHTML = '';
+      answerEl.textContent = '';
+      sourceView.innerHTML = '';
+      $('empty').style.display = 'none';
+      resetPipe();
+      setPipeOpen(true);
+      pipePinned = true;          // 重播時不要跑完就自動收起來，人家正在講解
+      pipeMeta(archLabel() + ' · 重播中', true);
+    }
+    setPlaying(true);
+    tick();
+  });
+}
+
+/* compare 的欄位骨架抽出來，重播和實跑共用 */
+function cmpPrepare(keys) {
+  $('cmpSummary').innerHTML = '';
+  CMP.cols = {};
+  const grid = $('cmpCols');
+  grid.style.gridTemplateColumns = 'repeat(' + keys.length + ', minmax(0, 1fr))';
+  grid.innerHTML = keys.map(k => {
+    const a = ARCHS.filter(x => x.key === k)[0] || { name: k, orchestration: '', modules: [] };
+    const mods = a.modules.concat(a.builtin_tools || []);
+    return '<div class="cmpcol" id="cmp-' + k + '">' +
+      '<h3>' + esc(a.name) + '<span class="orch">' + esc(a.orchestration) + '</span></h3>' +
+      '<div class="mods">' + mods.map(esc).join(' · ') + '</div>' +
+      '<div class="trace"></div><div class="ans hidden"></div></div>';
+  }).join('');
+  keys.forEach(k => { CMP.cols[k] = { calls: 0, answer: '', ms: 0, done: false }; });
+}
+
+function setPlaying(on) {
+  PLAY.playing = on;
+  $('rpPlay').textContent = on ? '暫停' : '播放';
+  if (!on && PLAY.timer) { clearTimeout(PLAY.timer); PLAY.timer = null; }
+}
+
+function rpPos() {
+  const t = PLAY.trace;
+  $('rpPos').textContent = t
+    ? PLAY.i + ' / ' + t.events.length + ' 個事件　原本跑了 ' + (t.ms / 1000).toFixed(0) + ' 秒'
+    : '';
+}
+
+/** 播一個事件，然後排下一個 */
+function tick() {
+  if (!PLAY.playing) return;
+  step();
+  schedule();
+}
+
+function schedule() {
+  const t = PLAY.trace;
+  if (!t || !PLAY.playing) return;
+  if (PLAY.i >= t.events.length) { setPlaying(false); return; }
+
+  const mode = $('rpSpeed').value;
+  const prev = PLAY.i > 0 ? t.events[PLAY.i - 1].t : 0;
+  const gap = Math.max(0, t.events[PLAY.i].t - prev);
+  // 「壓縮等待」：LLM 想那 30 秒是死時間，上課不需要重現 ——
+  // 但先後順序和節奏感留著，學生還是看得出哪一步想比較久。
+  const d = mode === '0' ? 0
+          : mode === 'compress' ? Math.min(gap, 1200)
+          : gap / parseFloat(mode);
+  PLAY.timer = setTimeout(tick, Math.min(d, 8000));
+}
+
+function step() {
+  const t = PLAY.trace;
+  if (!t || PLAY.i >= t.events.length) return;
+  const ev = t.events[PLAY.i++];
+  if (t.mode === 'compare') cmpHandle(ev, FAKE_ES, t.archs);
+  else handle(ev, FAKE_ES);
+  rpPos();
+}
+
+$('rpPlay').onclick = () => {
+  if (PLAY.playing) setPlaying(false);
+  else { setPlaying(true); schedule(); }
+};
+$('rpStep').onclick = () => { setPlaying(false); step(); };
+$('rpAgain').onclick = () => { if (PLAY.trace) startReplay(PLAY.trace.id); };
+$('rpSpeed').onchange = () => { if (PLAY.playing) { clearTimeout(PLAY.timer); schedule(); } };
+$('rpExit').onclick = exitReplay;
+
+function exitReplay() {
+  setPlaying(false);
+  PLAY.trace = null;
+  pipePinned = false;
+  $('replayBar').classList.add('hidden');
+  $('replayView').classList.add('hidden');
+  $('cmpView').classList.add('hidden');
+  $('traceView').classList.remove('hidden');
+}
 
 /* ══════════ 架構師：聊出一份 Architecture ══════════ */
 
@@ -1213,22 +1439,8 @@ function cmpStart(question, keys) {
   $('traceView').classList.add('hidden');
   $('architectView').classList.add('hidden');
   $('cmpView').classList.remove('hidden');
-  $('cmpSummary').innerHTML = '';
-  CMP.cols = {};
   CMP.t0 = Date.now();
-
-  const grid = $('cmpCols');
-  grid.style.gridTemplateColumns = 'repeat(' + keys.length + ', minmax(0, 1fr))';
-  grid.innerHTML = keys.map(k => {
-    const a = ARCHS.filter(x => x.key === k)[0] || { name: k, orchestration: '', modules: [] };
-    const mods = a.modules.concat(a.builtin_tools || []);
-    return '<div class="cmpcol" id="cmp-' + k + '">' +
-      '<h3>' + esc(a.name) + '<span class="orch">' + esc(a.orchestration) + '</span></h3>' +
-      '<div class="mods">' + mods.map(esc).join(' · ') + '</div>' +
-      '<div class="trace"></div><div class="ans hidden"></div></div>';
-  }).join('');
-
-  keys.forEach(k => { CMP.cols[k] = { calls: 0, answer: '', ms: 0, done: false }; });
+  cmpPrepare(keys);
 
   const es = new EventSource('/api/compare?q=' + encodeURIComponent(question) +
                              '&archs=' + encodeURIComponent(keys.join(',')));

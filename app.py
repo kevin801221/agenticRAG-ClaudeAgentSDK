@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 load_dotenv()
 
 import architect  # noqa: E402
+import traces  # noqa: E402
 from engines import check_config, describe_engine, get_engine  # noqa: E402
 from modules import ARCHITECTURES, BUILTIN_TOOLS, MODULES  # noqa: E402
 from retrieval import load_index  # noqa: E402
@@ -419,6 +420,36 @@ async def export_notes() -> Response:
     )
 
 
+# ══════════ 軌跡：存檔與重播 ══════════
+
+
+@app.get("/api/traces")
+async def list_traces() -> list[dict]:
+    return traces.listing()
+
+
+@app.get("/api/traces/{tid}")
+async def get_trace(tid: str) -> dict:
+    d = traces.load(tid)
+    if not d:
+        raise HTTPException(404, f"沒有這份軌跡：{tid}")
+    return d
+
+
+@app.post("/api/traces/{tid}/pin")
+async def pin_trace(tid: str, body: dict = Body(default={})) -> dict:
+    if not traces.pin(tid, bool(body.get("pinned", True))):
+        raise HTTPException(404, f"沒有這份軌跡：{tid}")
+    return {"id": tid, "pinned": bool(body.get("pinned", True))}
+
+
+@app.delete("/api/traces/{tid}")
+async def delete_trace(tid: str) -> dict:
+    if not traces.delete(tid):
+        raise HTTPException(404, f"沒有這份軌跡：{tid}")
+    return {"deleted": tid}
+
+
 # ══════════ 架構師：聊出一份 Architecture ══════════
 
 
@@ -483,10 +514,13 @@ async def compare(q: str, archs: str, scope: str = "", selection: str = "") -> S
         question = head + "\n" + q
 
     queue: asyncio.Queue = asyncio.Queue()
+    rec = traces.Recorder("compare", q, keys)
 
     def make_emit(key: str):
         def emit(event: dict) -> None:
-            queue.put_nowait({**event, "arch": key})
+            tagged = {**event, "arch": key}
+            rec.add(tagged)
+            queue.put_nowait(tagged)
         return emit
 
     async def run_one(key: str) -> None:
@@ -502,6 +536,8 @@ async def compare(q: str, archs: str, scope: str = "", selection: str = "") -> S
         try:
             await asyncio.gather(*(run_one(k) for k in keys))
         finally:
+            rec.add({"type": "all_done"})
+            rec.save()
             queue.put_nowait({"type": "all_done"})
             queue.put_nowait(None)
 
@@ -535,8 +571,10 @@ async def ask(q: str, arch: str = "modular", scope: str = "", selection: str = "
             head += f"【使用者圈選】\n{selection.strip()[:2000]}\n"
         question = head + "\n" + q
     queue: asyncio.Queue = asyncio.Queue()
+    rec = traces.Recorder("ask", q, [arch])
 
     def emit(event: dict) -> None:
+        rec.add(event)
         queue.put_nowait(event)
 
     async def worker() -> None:
@@ -552,6 +590,7 @@ async def ask(q: str, arch: str = "modular", scope: str = "", selection: str = "
         except Exception as exc:  # noqa: BLE001 — 錯誤要送到前端，不能只寫在 log
             emit({"type": "error", "text": f"{type(exc).__name__}: {exc}", "fatal": True})
         finally:
+            rec.save()
             queue.put_nowait(None)
 
     asyncio.create_task(worker())
