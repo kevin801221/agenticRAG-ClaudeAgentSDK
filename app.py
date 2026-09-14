@@ -414,6 +414,68 @@ async def export_notes() -> Response:
     )
 
 
+@app.get("/api/compare")
+async def compare(q: str, archs: str, scope: str = "", selection: str = "") -> StreamingResponse:
+    """同一題並排跑多個架構。
+
+    這是整套教材的主張變成一個畫面：模組一樣、語料一樣、問題一樣，
+    只有編排不同 —— 差別全部看得見。
+
+    平行跑（不是排隊），因為重點就是「同時」；每個架構會各自 spawn 一個 CLI 子行程。
+    事件都帶 `arch` 欄位，前端照這個分欄。
+    """
+    keys = [k.strip() for k in archs.split(",") if k.strip()][:3]   # 三欄以上就看不清楚了
+    if len(keys) < 2:
+        raise HTTPException(400, "並排比較至少要兩個架構")
+    unknown = [k for k in keys if k not in ARCHITECTURES]
+    if unknown:
+        raise HTTPException(400, f"沒有這些架構：{unknown}")
+
+    question = q
+    if scope:
+        head = f"【目前開啟】{scope}\n"
+        if selection.strip():
+            head += f"【使用者圈選】\n{selection.strip()[:2000]}\n"
+        question = head + "\n" + q
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def make_emit(key: str):
+        def emit(event: dict) -> None:
+            queue.put_nowait({**event, "arch": key})
+        return emit
+
+    async def run_one(key: str) -> None:
+        arch = ARCHITECTURES[key]
+        emit = make_emit(key)
+        emit({"type": "status", "text": f"{arch.name}｜{arch.orchestration}"})
+        try:
+            await RUN(question, INDEX, emit, arch)
+        except Exception as exc:  # noqa: BLE001
+            emit({"type": "error", "text": f"{type(exc).__name__}: {exc}", "fatal": True})
+
+    async def worker() -> None:
+        try:
+            await asyncio.gather(*(run_one(k) for k in keys))
+        finally:
+            queue.put_nowait({"type": "all_done"})
+            queue.put_nowait(None)
+
+    asyncio.create_task(worker())
+
+    async def stream():
+        while True:
+            event = await queue.get()
+            if event is None:
+                return
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/api/ask")
 async def ask(q: str, arch: str = "modular", scope: str = "", selection: str = "") -> StreamingResponse:
     architecture = ARCHITECTURES.get(arch)

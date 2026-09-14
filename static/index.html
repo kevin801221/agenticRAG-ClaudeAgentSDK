@@ -289,6 +289,40 @@
   }
   .chip:hover{border-color:var(--signal);color:var(--ink)}
 
+  /* ── 並排比較 ── */
+  .cmpbar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}
+  .cmpbar label{display:flex;align-items:center;gap:.35rem;cursor:pointer}
+  .cmpbar select{flex:0 1 auto;min-width:11rem}
+  .cmpcols{display:grid;gap:1rem;align-items:start}
+  .cmpcol{min-width:0}
+  .cmpcol > h3{
+    margin:0 0 .5rem;font-size:.92rem;display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;
+  }
+  .cmpcol > h3 .orch{font-size:.75rem;color:var(--muted);font-weight:400}
+  .cmpcol .mods{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:.5rem;
+    word-break:break-all}
+  .cmpcol .trace{padding-left:1.7rem}
+  .cmpcol .trace::before{left:.5rem}
+  .cmpcol .node-card::before{left:-1.45rem;width:.62rem;height:.62rem}
+  .cmpcol .card .args{font-size:.72rem}
+  .cmpcol .why{font-size:.86rem}
+  .cmpcol .ans{
+    margin-top:.7rem;padding:.6rem .8rem;border:1px solid var(--rail);border-radius:5px;
+    background:var(--panel);font-size:.9rem;white-space:pre-line;max-height:22rem;overflow-y:auto;
+  }
+  .cmpcol .ans h3{font-size:.9rem;margin:.6rem 0 .2rem;color:var(--signal)}
+  .cmpcol .ans ul{margin:.2rem 0;padding-left:1.1rem}
+  .cmpcol .ans li{white-space:normal}
+  .cmpcol .ans code{font-family:var(--mono);font-size:.85em;background:var(--panel-2);padding:.05rem .25rem;border-radius:2px}
+  .cmpcol .ans pre{white-space:pre;margin:.4rem 0}
+  .cmpcol.done > h3::after{content:"✓";color:var(--ok)}
+
+  .cmptable{width:100%;border-collapse:collapse;margin:1.2rem 0 .5rem;font-size:.85rem}
+  .cmptable th,.cmptable td{border:1px solid var(--rail);padding:.35rem .6rem;text-align:left}
+  .cmptable th{background:var(--panel-2);font-weight:600}
+  .cmptable td.num{font-family:var(--mono);text-align:right}
+  .cmptable tr.best td{color:var(--ok)}
+
   h2{font-size:.82rem;font-weight:600;color:var(--muted);margin:0 0 .9rem;letter-spacing:.06em}
   .answer{font-size:1.02rem;white-space:pre-line}
   .answer h3{font-size:1rem;margin:1.1rem 0 .3rem;color:var(--signal)}
@@ -489,6 +523,12 @@
     <form id="form">
       <label class="archpick"><span>架構</span><select id="arch"></select></label>
       <div class="archinfo" id="archinfo"></div>
+      <div class="cmpbar">
+        <label><input type="checkbox" id="cmpOn"> 並排比較</label>
+        <select id="arch2" class="hidden"></select>
+        <select id="arch3" class="hidden"></select>
+        <span class="hidden" id="cmpHint">同一題同時跑，差別直接看</span>
+      </div>
       <textarea id="q" placeholder="例如：hook 要怎麼擋住寫入 .env？" required></textarea>
       <button id="go" type="submit">問</button>
     </form>
@@ -521,6 +561,12 @@
       <h2>決策軌跡</h2>
       <div class="trace" id="trace"></div>
       <p class="empty" id="empty">還沒開始。每次 agent 選一個做法、呼叫一個模組，上面會亮、這裡會長出一段。</p>
+    </div>
+
+    <div id="cmpView" class="hidden">
+      <h2>並排比較</h2>
+      <div class="cmpcols" id="cmpCols"></div>
+      <div id="cmpSummary"></div>
     </div>
 
     <div id="docChat" class="hidden">
@@ -825,6 +871,7 @@ Promise.all([
     '<option value="' + a.key + '"' + (a.key === 'crag' ? ' selected' : '') + '>' + esc(a.name) + '</option>').join('');
   $('arch').onchange = showArch;
   showArch();
+  cmpFillSelects();
 
   $('patterns').innerHTML = ARCHS.map(a =>
     '<div class="pat"><h3>' + esc(a.name) + '</h3>' +
@@ -859,6 +906,15 @@ function ask(question) {
   resetPipe();
   setPipeOpen(true);
   pipeMeta(archLabel() + ' · 執行中', true);
+
+  const keys = $('cmpOn').checked ? cmpKeys() : [];
+  if (keys.length >= 2) {
+    setPipeOpen(false);          // 比較模式下流程圖沒有意義（不只一個架構在跑）
+    cmpStart(question, keys);
+    return;
+  }
+  $('cmpView').classList.add('hidden');
+  $('traceView').classList.remove('hidden');
 
   const es = new EventSource('/api/ask?q=' + encodeURIComponent(question)
                              + '&arch=' + encodeURIComponent($('arch').value));
@@ -967,6 +1023,140 @@ function loadCorpus() {
  });
 }
 loadCorpus();
+
+/* ══════════ 並排比較 ══════════ */
+
+/* 同一題、同一組模組、同一份語料，只有編排不同 —— 差別全部攤在同一個畫面上。
+   這是整套教材的主張變成一頁。 */
+
+const CMP = { cols: {}, t0: 0 };
+
+function cmpKeys() {
+  const keys = [$('arch').value];
+  [$('arch2'), $('arch3')].forEach(sel => {
+    if (!sel.classList.contains('hidden') && sel.value && !keys.includes(sel.value)) keys.push(sel.value);
+  });
+  return keys;
+}
+
+$('cmpOn').onchange = () => {
+  const on = $('cmpOn').checked;
+  ['arch2', 'arch3', 'cmpHint'].forEach(id => $(id).classList.toggle('hidden', !on));
+  if (on && !$('arch2').value) {
+    // 預設挑一個對比最強的：跟目前選的不同的那個
+    $('arch2').value = $('arch').value === 'naive' ? 'crag' : 'naive';
+  }
+};
+
+function cmpFillSelects() {
+  const opts = ARCHS.map(a => '<option value="' + a.key + '">' + esc(a.name) + '</option>').join('');
+  $('arch2').innerHTML = '<option value="">（不加第二個）</option>' + opts;
+  $('arch3').innerHTML = '<option value="">（不加第三個）</option>' + opts;
+}
+
+function cmpStart(question, keys) {
+  $('traceView').classList.add('hidden');
+  $('cmpView').classList.remove('hidden');
+  $('cmpSummary').innerHTML = '';
+  CMP.cols = {};
+  CMP.t0 = Date.now();
+
+  const grid = $('cmpCols');
+  grid.style.gridTemplateColumns = 'repeat(' + keys.length + ', minmax(0, 1fr))';
+  grid.innerHTML = keys.map(k => {
+    const a = ARCHS.filter(x => x.key === k)[0] || { name: k, orchestration: '', modules: [] };
+    const mods = a.modules.concat(a.builtin_tools || []);
+    return '<div class="cmpcol" id="cmp-' + k + '">' +
+      '<h3>' + esc(a.name) + '<span class="orch">' + esc(a.orchestration) + '</span></h3>' +
+      '<div class="mods">' + mods.map(esc).join(' · ') + '</div>' +
+      '<div class="trace"></div><div class="ans hidden"></div></div>';
+  }).join('');
+
+  keys.forEach(k => { CMP.cols[k] = { calls: 0, answer: '', ms: 0, done: false }; });
+
+  const es = new EventSource('/api/compare?q=' + encodeURIComponent(question) +
+                             '&archs=' + encodeURIComponent(keys.join(',')));
+  es.onmessage = m => cmpHandle(JSON.parse(m.data), es, keys);
+  es.onerror = () => { es.close(); $('go').disabled = false; $('go').textContent = '問'; };
+}
+
+function cmpHandle(ev, es, keys) {
+  if (ev.type === 'all_done') {
+    es.close();
+    $('go').disabled = false;
+    $('go').textContent = '問';
+    cmpSummary(keys);
+    return;
+  }
+  const col = $('cmp-' + ev.arch);
+  if (!col) return;
+  const trace = col.querySelector('.trace');
+  const st = CMP.cols[ev.arch];
+
+  if (ev.type === 'status' || ev.type === 'reasoning') {
+    cmpCard(trace, 'think', '<div class="why">' + esc(ev.text) + '</div>');
+  } else if (ev.type === 'tool_call') {
+    st.calls++;
+    cmpCard(trace, 'act',
+      '<div class="card"><div class="head">' +
+        '<span class="n">' + ev.step + '</span>' +
+        '<span class="tool">' + esc(ev.tool) + '</span>' +
+        '<span class="args">' + esc(JSON.stringify(ev.args)) + '</span>' +
+      '</div><div class="out" id="cmpout-' + ev.arch + '-' + ev.step + '">執行中…</div></div>');
+  } else if (ev.type === 'tool_result') {
+    const out = $('cmpout-' + ev.arch + '-' + ev.step);
+    if (out) {
+      out.textContent = ev.summary;
+      out.className = 'out' + (/失敗|^0 筆/.test(ev.summary) ? ' bad' : '');
+    }
+  } else if (ev.type === 'answer') {
+    st.answer = ev.text;
+    const box = col.querySelector('.ans');
+    box.classList.remove('hidden');
+    box.innerHTML = md(ev.text).replace(/\[([^\[\]\s]+#\d+)\]/g,
+      (_, id) => '<span class="cite" data-id="' + id + '">' + id + '</span>');
+    box.querySelectorAll('.cite').forEach(el => { el.onclick = () => showSource(el.dataset.id); });
+  } else if (ev.type === 'done') {
+    st.ms = ev.elapsed_ms;
+    st.done = true;
+    col.classList.add('done');
+  } else if (ev.type === 'error' && ev.fatal) {
+    cmpCard(trace, 'turn', '<div class="pivot"><strong>錯誤</strong> — ' + esc(ev.text) + '</div>');
+  }
+}
+
+function cmpCard(trace, kind, html) {
+  const d = document.createElement('div');
+  d.className = 'node-card ' + kind;
+  d.innerHTML = html;
+  trace.appendChild(d);
+}
+
+function cmpSummary(keys) {
+  const rows = keys.map(k => {
+    const a = ARCHS.filter(x => x.key === k)[0] || { name: k };
+    const st = CMP.cols[k];
+    const cites = new Set((st.answer.match(/\[([^\[\]\s]+#\d+)\]/g) || []));
+    return { name: a.name, calls: st.calls, sec: st.ms / 1000, cites: cites.size, len: st.answer.length };
+  });
+  const fastest = Math.min(...rows.map(r => r.sec));
+
+  $('cmpSummary').innerHTML =
+    '<table class="cmptable"><thead><tr>' +
+      '<th>架構</th><th>模組呼叫</th><th>耗時</th><th>出處</th><th>答案長度</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(r =>
+      '<tr class="' + (r.sec === fastest ? 'best' : '') + '">' +
+        '<td>' + esc(r.name) + '</td>' +
+        '<td class="num">' + r.calls + '</td>' +
+        '<td class="num">' + r.sec.toFixed(1) + ' s</td>' +
+        '<td class="num">' + r.cites + '</td>' +
+        '<td class="num">' + r.len + ' 字</td>' +
+      '</tr>').join('') +
+    '</tbody></table>' +
+    '<p class="empty">呼叫次數多不代表比較好 —— 它代表在自我修正，也代表更慢更貴。' +
+    '出處 0 個表示它在憑記憶答，那是 RAG 最常見的假成功。</p>';
+}
 
 /* ══════════ 匯入：整頁拖放 + 批次佇列 ══════════ */
 
@@ -1309,6 +1499,7 @@ function openDoc(path, isPdf, page) {
   DOC.path = path; DOC.isPdf = isPdf; DOC.page = page || 1;
   $('askView').classList.add('hidden');
   $('traceView').classList.add('hidden');
+  $('cmpView').classList.add('hidden');
   $('docView').classList.remove('hidden');
   $('docChat').classList.remove('hidden');
   $('docName').textContent = path;
