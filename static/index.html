@@ -235,7 +235,7 @@
   .savebtn.saved{border-color:var(--ok);color:var(--ok);cursor:default}
   .noteshead{display:flex;align-items:center;gap:.7rem;margin:.9rem 0 .6rem}
   .noteshead button{padding:.2rem .7rem;font-size:.8rem;font-weight:400;align-self:auto}
-  .notes{display:flex;flex-direction:column;gap:.7rem;max-height:46vh;overflow-y:auto}
+  .notes{display:flex;flex-direction:column;gap:.7rem}
   .note{border:1px solid var(--rail);border-radius:5px;padding:.6rem .8rem;background:var(--panel-2)}
   .note .q{font-weight:600;font-size:.92rem;margin-bottom:.2rem}
   .note .meta{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
@@ -440,8 +440,56 @@
   }
   .pivot strong{color:var(--ink);font-weight:600}
 
-  footer{border-top:1px solid var(--rail);background:var(--panel);padding:1rem 1.5rem}
-  footer > details > summary{padding:0;font-size:.9rem;color:var(--ink)}
+  /* ── 左側抽屜：滑過去打開，移開縮回去 ──────── */
+  :root{--railw:52px;--drawer:340px}
+  body{padding-left:var(--railw)}
+
+  .rail{
+    position:fixed;left:0;top:0;bottom:0;z-index:40;display:flex;
+    width:var(--railw);background:var(--panel);border-right:1px solid var(--rail);
+    transition:width .16s ease .18s;          /* 開得快、關得慢一點，滑過頭不會馬上關掉 */
+    overflow:hidden;
+  }
+  .rail:hover,.rail:focus-within,.rail.pinned{width:calc(var(--railw) + var(--drawer));transition-delay:0s}
+  /* 點了裡面的東西之後強制收起來，滑鼠真的離開才解除 —— :hover 沒辦法用 JS 取消 */
+  .rail.shut{width:var(--railw) !important}
+
+  .rail .tabs{
+    flex:0 0 var(--railw);display:flex;flex-direction:column;gap:.2rem;
+    padding:.5rem .3rem;border-right:1px solid var(--rail);background:var(--panel);
+  }
+  .rail .tab{
+    position:relative;display:flex;flex-direction:column;align-items:center;gap:.15rem;
+    padding:.5rem .1rem;border:0;border-radius:5px;background:none;color:var(--muted);
+    font-family:var(--sans);font-size:.63rem;line-height:1.25;cursor:pointer;
+    text-decoration:none;text-align:center;
+  }
+  .rail .tab svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round}
+  .rail .tab:hover{color:var(--ink);background:var(--panel-2)}
+  .rail .tab.on{color:var(--signal);background:var(--panel-2)}
+  .rail .tab.on::before{
+    content:"";position:absolute;left:-.3rem;top:.35rem;bottom:.35rem;
+    width:2px;border-radius:2px;background:var(--signal);
+  }
+  .rail .tab .cnt{font-family:var(--mono);color:var(--signal)}
+
+  .rail .panels{flex:1;min-width:var(--drawer);overflow:hidden;position:relative}
+  .rail .panel{
+    position:absolute;inset:0;overflow-y:auto;padding:.9rem 1rem;
+    opacity:0;pointer-events:none;transition:opacity .12s;
+  }
+  .rail .panel.on{opacity:1;pointer-events:auto}
+  .rail .panel h2{font-size:.9rem;margin:0 0 .2rem}
+  .rail .panel .lede{font-size:.78rem;color:var(--muted);margin:0 0 .8rem;line-height:1.55}
+  .rail .pinbar{
+    display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;
+    font-family:var(--mono);font-size:.7rem;color:var(--muted);
+  }
+  .rail .pinbar button{padding:.1rem .5rem;font-size:.7rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .rail .pinbar button:hover{color:var(--ink);border-color:var(--signal)}
+  .rail.pinned .pinbar button{color:var(--signal);border-color:var(--signal)}
   /* ── 整頁拖放遮罩 ── */
   .dropzone{
     position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
@@ -497,7 +545,7 @@
   .addbtn:hover{border-color:var(--signal);color:var(--signal)}
 
   /* ── 上傳區 ── */
-  .drop{
+  .drop{flex-wrap:wrap;
     border:1.5px dashed var(--rail);border-radius:6px;padding:.9rem 1rem;margin:.8rem 0;
     display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;transition:border-color .15s,background .15s;
   }
@@ -516,7 +564,7 @@
   .ingest .plan code{font-family:var(--mono);color:var(--ink)}
   .ingest .fail{color:var(--alert)}
 
-  .corpus{display:grid;gap:.35rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.8rem}
+  .corpus{display:grid;gap:.35rem;margin-top:.8rem}
   .cfile{
     display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;
     background:none;border:1px solid var(--rail);border-radius:4px;
@@ -529,9 +577,8 @@
   .cfile.md .kind{color:var(--muted)}
   .cfile .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cfile .n{font-family:var(--mono);font-size:.72rem;color:var(--muted);flex-shrink:0}
-  footer > details + details{margin-top:.7rem}
 
-  .patterns{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:1rem}
+  .patterns{display:grid;gap:.9rem;margin-top:.4rem}
   .pat h3{margin:0 0 .25rem;font-size:.95rem}
   .pat p{margin:0 0 .3rem;font-size:.86rem;color:var(--muted)}
   .pat .where{font-family:var(--mono);font-size:.76rem;color:var(--signal)}
@@ -688,33 +735,59 @@
   <div class="jobs-body" id="jobsBody"></div>
 </div>
 
-<footer>
-  <details id="notesPanel">
-    <summary>筆記本 <span id="notesCount"></span></summary>
-    <div class="noteshead">
-      <button type="button" id="notesExport">匯出 Markdown</button>
-      <span class="pipe-meta">存下來的問答會寫進 notes/，匯出的 .md 可以直接貼進教材</span>
-    </div>
-    <div class="notes" id="notesList"></div>
-  </details>
-  <details>
-    <summary>語料庫 — 點檔名直接看，PDF 會開閱讀器</summary>
+<aside class="rail" id="rail">
+  <nav class="tabs">
+    <button type="button" class="tab on" data-p="pNotes" title="筆記本">
+      <svg viewBox="0 0 20 20"><path d="M5.5 2.5h9v15l-4.5-3.5-4.5 3.5z"/></svg>
+      筆記<span class="cnt" id="notesCount"></span>
+    </button>
+    <button type="button" class="tab" data-p="pCorpus" title="語料庫">
+      <svg viewBox="0 0 20 20"><path d="M3.5 5.5h8l1.5 2h3.5v9h-13z"/><path d="M3.5 8.5h13"/></svg>
+      語料
+    </button>
+    <button type="button" class="tab" data-p="pLib" title="架構圖書館">
+      <svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
+      架構
+    </button>
+    <a class="tab" href="/studio" target="_blank" rel="noopener" title="Studio — 畫布版組裝台（另開分頁）">
+      <svg viewBox="0 0 20 20"><circle cx="4.5" cy="5.5" r="2.2"/><circle cx="15.5" cy="10" r="2.2"/><circle cx="4.5" cy="14.5" r="2.2"/><path d="M6.7 6.5 13.3 9M6.7 13.5 13.3 11"/></svg>
+      Studio
+    </a>
+  </nav>
 
-    <div class="drop" id="drop">
-      <button type="button" id="pickFile">選擇檔案</button>
-      <span class="hint"><strong>或直接把檔案拖到頁面任何地方</strong>（可以一次丟多份，會排隊處理）。
-        <code>.md</code> <code>.txt</code> <code>.pdf</code>，單檔最大 40 MB ——
-        agent 會逐份看過內容決定怎麼切、要不要補脈絡，切完併進語料庫就能被檢索到。</span>
-      <input type="file" id="fileInput" accept=".md,.txt,.pdf" hidden>
-    </div>
+  <div class="panels">
+    <section class="panel on" id="pNotes">
+      <div class="pinbar"><button type="button" class="pin">釘住</button><span>滑鼠移開會自動收回去</span></div>
+      <h2>筆記本</h2>
+      <p class="lede">存下來的問答會寫進 <code>notes/</code>，匯出的 .md 可以直接貼進教材。</p>
+      <div class="noteshead">
+        <button type="button" id="notesExport">匯出 Markdown</button>
+      </div>
+      <div class="notes" id="notesList"></div>
+    </section>
 
-    <div class="corpus" id="corpusList"></div>
-  </details>
-  <details>
-    <summary>架構圖書館 — 同一組模組，換不同政策</summary>
-    <div class="patterns" id="patterns"></div>
-  </details>
-</footer>
+    <section class="panel" id="pCorpus">
+      <div class="pinbar"><button type="button" class="pin">釘住</button><span>滑鼠移開會自動收回去</span></div>
+      <h2>語料庫</h2>
+      <p class="lede">點檔名直接看，PDF 會開閱讀器。</p>
+      <div class="drop" id="drop">
+        <button type="button" id="pickFile">選擇檔案</button>
+        <span class="hint"><strong>或直接把檔案拖到頁面任何地方</strong>（可以一次丟多份，會排隊處理）。
+          <code>.md</code> <code>.txt</code> <code>.pdf</code>，單檔最大 40 MB ——
+          agent 會逐份看過內容決定怎麼切、要不要補脈絡。</span>
+        <input type="file" id="fileInput" accept=".md,.txt,.pdf" hidden>
+      </div>
+      <div class="corpus" id="corpusList"></div>
+    </section>
+
+    <section class="panel" id="pLib">
+      <div class="pinbar"><button type="button" class="pin">釘住</button><span>滑鼠移開會自動收回去</span></div>
+      <h2>架構圖書館</h2>
+      <p class="lede">同一組模組，換不同政策。想自己拉一個就開 Studio。</p>
+      <div class="patterns" id="patterns"></div>
+    </section>
+  </div>
+</aside>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -1108,12 +1181,45 @@ function loadCorpus() {
     b.onclick = () => {
       openDoc(b.dataset.path, b.classList.contains('pdf'), 1);
       $('leftCol').scrollTo({ top: 0 });
-      document.querySelectorAll('footer details').forEach(d => { d.open = false; });
+      closeRail();
     };
   });
  });
 }
 loadCorpus();
+
+/* ══════════ 左側抽屜 ══════════ */
+
+/* 筆記本／語料庫／架構圖書館本來擺在頁尾，展開會把整頁推下去。
+   收進抽屜之後它是浮在上面的，滑過去看一眼就走，版面不動。 */
+
+const RAIL = $('rail');
+
+function showPanel(id) {
+  RAIL.querySelectorAll('.tab[data-p]').forEach(t => t.classList.toggle('on', t.dataset.p === id));
+  RAIL.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === id));
+}
+
+RAIL.querySelectorAll('.tab[data-p]').forEach(t => {
+  t.onpointerenter = () => showPanel(t.dataset.p);   // 滑過去就換，不用點
+  t.onclick = () => { showPanel(t.dataset.p); RAIL.classList.add('pinned'); };
+});
+
+RAIL.querySelectorAll('.pin').forEach(b => {
+  b.onclick = () => RAIL.classList.toggle('pinned');
+});
+
+/** 點了裡面的東西（開文件之類）就把抽屜收掉 —— 它擋在畫面上 */
+function closeRail() {
+  RAIL.classList.remove('pinned');
+  RAIL.classList.add('shut');
+  if (RAIL.contains(document.activeElement)) document.activeElement.blur();
+}
+RAIL.addEventListener('pointerleave', () => RAIL.classList.remove('shut'));
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && RAIL.classList.contains('pinned')) closeRail();
+});
 
 /* ══════════ 軌跡重播 ══════════ */
 
@@ -1743,7 +1849,7 @@ function loadNotes() {
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(c => {
               openDoc(c.path, !!c.is_pdf, c.page || 1);
-              $('notesPanel').open = false;
+              closeRail();
             })
             .catch(() => {});
         };
@@ -1754,7 +1860,7 @@ function loadNotes() {
         open.textContent = '開啟來源';
         open.onclick = () => {
           openDoc(n.source, n.source.toLowerCase().endsWith('.pdf'), 1);
-          $('notesPanel').open = false;
+          closeRail();
         };
         row.appendChild(open);
       }

@@ -24,6 +24,8 @@ uv run jupyter lab notebooks/           # 教學主體
 uv run uvicorn app:app --reload         # 或看網頁 demo：http://localhost:8000
 ```
 
+用 VS Code 開 notebook 的話，kernel 要選專案根目錄的 `.venv`（Python 3.13，`uv sync` 裝的那個）。不要讓 VS Code 幫你「建立新環境」—— 它會在 `notebooks/` 底下建一個只有 ipykernel 的空 venv，什麼都 import 不到。
+
 教室沒網路 / 不想下載模型：`uv run python index_corpus.py --no-vectors`（純 BM25，秒建，功能完整）。
 
 ### 認證：本機 `claude` 已登入的話，什麼都不用設
@@ -191,6 +193,25 @@ uv run uvicorn app:app --reload
 
 > 這是 Adaptive-RAG 的「選型」升一層：Adaptive 替**一個問題**選路線，
 > 架構師替**一個使用情境**選架構。而且建議完可以馬上並排驗證 —— 建議與驗證在同一個畫面。
+
+### 左邊的抽屜：滑過去打開，移開縮回去
+
+筆記本、語料庫、架構圖書館本來擺在頁尾，一展開就把整頁推下去 ——
+看一眼語料庫，回來還要重新捲。現在收進左邊 52px 的圖示列：
+
+```
+┌──┬──────────────────┐
+│筆│  滑鼠移過來 →      │   滑過圖示就換面板，不用點
+│記│  抽屜浮在畫面上     │   點一下＝釘住，再點一次放開
+│語│  （版面完全不動）   │   點裡面的檔案 → 開文件，抽屜自己收掉
+│料│                   │   Esc 也收
+│架│                   │
+│構│                   │
+│St│ ← Studio 另開分頁   │
+└──┴──────────────────┘
+```
+
+抽屜是**浮在上面**的，不是把版面推開 —— 所以看完移開滑鼠，畫面跟你離開前一模一樣。
 
 ### Studio：畫布版組裝台（`/studio`）
 
