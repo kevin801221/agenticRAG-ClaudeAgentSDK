@@ -278,6 +278,19 @@ async def delete_note(note_id: str) -> dict:
     return {"deleted": note_id, "left": len(keep)}
 
 
+@app.get("/api/notes/image/{note_id}")
+async def note_image(note_id: str) -> FileResponse:
+    """筆記的框選截圖。存成檔案而不是把 base64 塞在 notes.json 裡，
+    是因為那個 JSON 之後還要給人讀、給 git 看 diff。"""
+    note = next((n for n in _load_notes() if n["id"] == note_id), None)
+    if not note or not note.get("image"):
+        raise HTTPException(404, f"這則筆記沒有截圖：{note_id}")
+    target = (NOTES_DIR / note["image"]).resolve()
+    if NOTES_DIR.resolve() not in target.parents or not target.is_file():
+        raise HTTPException(404, "截圖檔不見了")
+    return FileResponse(target, media_type="image/png")
+
+
 @app.get("/api/notes/export")
 async def export_notes() -> Response:
     """匯出成 Markdown —— 這些筆記的終點是教材，所以要能直接貼。"""

@@ -53,11 +53,13 @@
   .pipe-meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pipe-meta.live{color:var(--signal)}
+  /* 用 height 而不是 max-height：內容比 max-height 矮的時候，拖曳完全沒反應，
+     因為實際高度由內容決定。改成固定高度 + 內部捲動，拖多少就是多少。 */
   .pipe-body{
-    overflow:hidden auto;max-height:var(--pipeH,340px);opacity:1;
+    overflow:hidden auto;height:var(--pipeH,300px);opacity:1;
     padding:0 1rem .3rem;transition:opacity .22s ease,padding .3s ease;
   }
-  .pipe.collapsed .pipe-body{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
+  .pipe.collapsed .pipe-body{height:0;opacity:0;padding-top:0;padding-bottom:0}
 
   /* 流程圖下緣的橫線：拖它可以調整流程圖區的高度 */
   .hsplit{
@@ -237,14 +239,26 @@
   .note{border:1px solid var(--rail);border-radius:5px;padding:.6rem .8rem;background:var(--panel-2)}
   .note .q{font-weight:600;font-size:.92rem;margin-bottom:.2rem}
   .note .meta{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
-  .note .a{font-size:.86rem;color:var(--ink);opacity:.85;max-height:5.5rem;overflow:hidden;white-space:pre-line}
+  .note .a{font-size:.86rem;color:var(--ink);opacity:.9;max-height:7rem;overflow:hidden;position:relative}
+  .note .a.open{max-height:none}
+  .note .a:not(.open)::after{
+    content:"";position:absolute;left:0;right:0;bottom:0;height:2.2rem;
+    background:linear-gradient(transparent,var(--panel-2));   /* 截斷處淡出，不要硬切 */
+  }
+  .note .a h3{font-size:.85rem;margin:.5rem 0 .15rem;color:var(--signal)}
+  .note .a ul{margin:.2rem 0;padding-left:1.1rem}
+  .note .a li{margin-bottom:.15rem}
+  .note .a code{font-family:var(--mono);font-size:.85em;background:var(--panel);padding:.05rem .25rem;border-radius:2px}
+  .note .a .cite{font-size:.72rem}
+  .note .a table{border-collapse:collapse;margin:.4rem 0;font-size:.82rem;width:100%}
+  .note .a th,.note .a td{border:1px solid var(--rail);padding:.2rem .4rem;text-align:left}
   .note .row{display:flex;gap:.5rem;margin-top:.5rem}
   .note .row button{padding:.15rem .55rem;font-size:.75rem;font-weight:400;align-self:auto;
     background:none;color:var(--muted);border:1px solid var(--rail)}
   .note .row button:hover{color:var(--ink);border-color:var(--signal)}
   .note .row button.del:hover{color:var(--alert);border-color:var(--alert)}
-  .note img{max-width:180px;max-height:90px;border:1px solid var(--rail);border-radius:3px;
-    margin-bottom:.4rem;display:block;background:#fff}
+  .note img{max-width:min(100%,320px);max-height:150px;border:1px solid var(--rail);
+    border-radius:3px;margin-bottom:.5rem;display:block;background:#fff;cursor:zoom-in}
 
   .lede{color:var(--muted);margin:0 0 1rem;max-width:46ch;font-size:.92rem}
   form{display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.1rem}
@@ -883,10 +897,40 @@ function loadNotes() {
       d.innerHTML =
         '<div class="q">' + esc(n.question) + '</div>' +
         '<div class="meta">' + esc(n.created_at) + (n.source ? ' ｜ ' + esc(n.source) : '') + '</div>' +
-        (n.image ? '<img src="/api/notes/image/' + n.id + '" alt="錨定區域">' : '') +
-        '<div class="a">' + esc(n.answer.slice(0, 320)) + (n.answer.length > 320 ? '…' : '') + '</div>' +
+        (n.image ? '<img src="/api/notes/image/' + n.id + '" alt="錨定區域" ' +
+          'onclick="window.open(this.src)" title="點一下看原圖">' : '') +
+        '<div class="a">' + md(n.answer).replace(/\[([^\[\]\s]+#\d+)\]/g,
+          (_, id) => '<span class="cite" data-id="' + id + '">' + id + '</span>') + '</div>' +
         '<div class="row"></div>';
+      const body = d.querySelector('.a');
       const row = d.querySelector('.row');
+
+      // 用字數判斷要不要給展開鈕。原本量 scrollHeight，但面板收合時量到的是 0，
+      // 按鈕永遠不會出現 —— 量版面得等它可見，字數不用。
+      if (n.answer.length > 360) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.textContent = '展開全文';
+        more.onclick = () => {
+          body.classList.toggle('open');
+          more.textContent = body.classList.contains('open') ? '收合' : '展開全文';
+        };
+        row.appendChild(more);
+      }
+
+      // 筆記裡的出處也能點 —— 直接開到那一頁
+      body.querySelectorAll('.cite').forEach(el => {
+        el.style.cursor = 'pointer';
+        el.onclick = () => {
+          fetch('/api/chunk?id=' + encodeURIComponent(el.dataset.id))
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(c => {
+              openDoc(c.path, !!c.is_pdf, c.page || 1);
+              $('notesPanel').open = false;
+            })
+            .catch(() => {});
+        };
+      });
       if (n.source) {
         const open = document.createElement('button');
         open.type = 'button';
