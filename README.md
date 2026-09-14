@@ -203,3 +203,9 @@ embedding 載不動、沒網路、MPS 出問題 —— 自動退回純 BM25 並�
 - Adaptive-RAG — Jeong et al. 2024, NAACL
 - HyDE — Gao et al. 2022, [arXiv:2212.10496](https://arxiv.org/abs/2212.10496)
 - [Claude Agent SDK 官方文件](https://code.claude.com/docs/en/agent-sdk)
+
+---
+
+## 授權
+
+MIT — 隨意使用、修改、再散布，教學或商用都可以，保留著作權聲明即可。
