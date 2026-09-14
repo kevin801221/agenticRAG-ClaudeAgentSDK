@@ -91,6 +91,8 @@
   }
   .node:hover{border-color:var(--signal)}
   .node.sel{border-color:var(--signal);box-shadow:0 0 0 1px var(--signal)}
+  .node.ran{border-color:var(--ok)}
+  .node.hot{border-color:var(--signal);box-shadow:0 0 0 2px var(--signal),0 0 18px rgba(242,180,65,.35)}
   .node .n{font-family:var(--mono);font-size:.82rem}
   .node .s{font-size:.68rem;color:var(--muted);font-family:var(--mono)}
   .node .d{font-size:.72rem;color:var(--muted);line-height:1.4;margin-top:.15rem;
@@ -116,7 +118,7 @@
 
   .elabel{
     position:absolute;transform:translate(-50%,-50%);z-index:3;
-    font-size:.7rem;font-family:var(--mono);white-space:nowrap;
+    font-size:.7rem;font-family:var(--mono);white-space:nowrap;max-width:14rem;overflow:hidden;
     background:var(--ground);border:1px solid var(--rail);border-radius:3px;
     padding:.05rem .35rem;color:var(--muted);cursor:text;
   }
@@ -184,10 +186,46 @@
   }
   .palette .addsrv:hover{color:var(--signal);border-color:var(--signal)}
 
+  /* ── 右欄分頁 ── */
+  .tabs2{display:flex;gap:.25rem;border-bottom:1px solid var(--rail);margin:-.2rem -.3rem .3rem}
+  .t2{
+    flex:1;padding:.35rem;font-size:.82rem;font-weight:400;border-radius:4px 4px 0 0;
+    background:none;color:var(--muted);border:0;border-bottom:2px solid transparent;
+  }
+  .t2:hover{color:var(--ink)}
+  .t2.on{color:var(--signal);border-bottom-color:var(--signal);font-weight:600}
+  .tpane{display:none;flex-direction:column;gap:.7rem}
+  .tpane.on{display:flex}
+
+  #rq,#cq{width:100%;min-height:4.5rem;font-size:.85rem;resize:vertical}
+  .ex{display:flex;gap:.3rem;flex-wrap:wrap}
+  .ex button{padding:.1rem .5rem;font-size:.72rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .ex button:hover{color:var(--signal);border-color:var(--signal)}
+
+  .rtrace{display:flex;flex-direction:column;gap:.4rem}
+  .rstep{border-left:2px solid var(--rail);padding:.25rem .6rem;font-size:.78rem;line-height:1.55}
+  .rstep.act{border-color:var(--signal)}
+  .rstep.think{border-color:var(--rail);color:var(--muted)}
+  .rstep.bad{border-color:var(--alert)}
+  .rstep .t{font-family:var(--mono);font-size:.76rem;color:var(--signal)}
+  .rstep .a{font-family:var(--mono);font-size:.7rem;color:var(--muted);word-break:break-all}
+  .rstep .o{font-size:.75rem;color:var(--ink);margin-top:.15rem}
+  .rans{
+    border:1px solid var(--ok);border-radius:5px;padding:.6rem .8rem;
+    background:rgba(111,211,168,.06);font-size:.82rem;line-height:1.7;white-space:pre-wrap;
+    max-height:24rem;overflow-y:auto;
+  }
+
+  .chatlog{display:flex;flex-direction:column;gap:.5rem;max-height:32rem;overflow-y:auto}
+  .bub{border-radius:6px;padding:.45rem .7rem;font-size:.82rem;line-height:1.7;white-space:pre-wrap}
+  .bub.me{background:var(--panel-2);border:1px solid var(--rail)}
+  .bub.ai{border-left:2px solid var(--signal);padding-left:.6rem}
+
   /* ── 右欄 ── */
   .side{
     border-left:1px solid var(--rail);background:var(--panel);
-    overflow-y:auto;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.7rem;
+    overflow-y:auto;padding:.7rem 1rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;
   }
   .side h2{font-size:.82rem;margin:0;color:var(--ink)}
   .side .sub{font-size:.74rem;color:var(--muted);margin:0}
@@ -252,29 +290,65 @@
   </section>
 
   <section class="side">
-    <div class="row">
-      <label style="flex:1">名字 <input id="sName" placeholder="例如：客服知識庫用"></label>
-    </div>
-    <div class="row">
-      <label style="flex:1">編排 <input id="sOrch" placeholder="Linear / Conditional / Branching / Looping" style="flex:1"></label>
-      <label>上限 <input id="sTurns" type="number" min="1" max="30" value="12"></label>
+    <div class="tabs2">
+      <button type="button" class="t2 on" data-t="tSetup">設定</button>
+      <button type="button" class="t2" data-t="tRun">試跑</button>
+      <button type="button" class="t2" data-t="tChat">架構師</button>
     </div>
 
-    <h2>這張圖的意思</h2>
-    <p class="sub">把你畫的連線讀成文字。看得懂才表示這張圖真的說清楚了。</p>
-    <div class="compiled" id="sCompiled"></div>
+    <div class="tpane on" id="tSetup">
+      <div class="row">
+        <label style="flex:1">名字 <input id="sName" placeholder="例如：客服知識庫用"></label>
+      </div>
+      <div class="row">
+        <label style="flex:1">編排 <input id="sOrch" placeholder="Linear / Conditional / Branching / Looping" style="flex:1"></label>
+        <label>上限 <input id="sTurns" type="number" min="1" max="30" value="12"></label>
+      </div>
 
-    <h2>policy — 真正會被執行的東西</h2>
-    <p class="sub">agent 收到的是這段字，不是那張圖。</p>
-    <div class="note hidden" id="sNote"></div>
-    <div class="row">
-      <button type="button" class="ghost" id="sWrite">照這張圖幫我寫 policy</button>
+      <h2>這張圖的意思</h2>
+      <p class="sub">把你畫的連線讀成文字。看得懂才表示這張圖真的說清楚了。</p>
+      <div class="compiled" id="sCompiled"></div>
+
+      <h2>policy — 真正會被執行的東西</h2>
+      <p class="sub">agent 收到的是這段字，不是那張圖。</p>
+      <div class="note hidden" id="sNote"></div>
+      <div class="row">
+        <button type="button" class="ghost" id="sWrite">照這張圖幫我寫 policy</button>
+        <button type="button" class="ghost" id="sRedraw">照 policy 重畫這張圖</button>
+      </div>
+      <textarea id="sPolicy" placeholder="什麼時候用哪個模組、判斷條件是什麼、失敗了怎麼辦、出處要怎麼標。"></textarea>
+
+      <div class="row">
+        <button type="button" id="sSave">存起來</button>
+        <span class="msg" id="sMsg"></span>
+      </div>
     </div>
-    <textarea id="sPolicy" placeholder="什麼時候用哪個模組、判斷條件是什麼、失敗了怎麼辦、出處要怎麼標。"></textarea>
 
-    <div class="row">
-      <button type="button" id="sSave">存起來</button>
-      <span class="msg" id="sMsg"></span>
+    <div class="tpane" id="tRun">
+      <h2>試跑一題</h2>
+      <p class="sub">不用先存檔。拿現在畫布上這份草稿直接跑，看它到底會不會動、
+        走的順序跟你畫的一不一樣。</p>
+      <textarea id="rq" placeholder="例如：hook 要怎麼擋住寫入 .env？"></textarea>
+      <div class="ex" id="rEx"></div>
+      <div class="row">
+        <button type="button" id="rGo">跑</button>
+        <button type="button" class="ghost" id="rClear">清掉</button>
+        <span class="msg" id="rMsg"></span>
+      </div>
+      <div class="rtrace" id="rTrace"></div>
+      <div class="rans hidden" id="rAns"></div>
+    </div>
+
+    <div class="tpane" id="tChat">
+      <h2>聊出一個架構</h2>
+      <p class="sub">講一下你的情境，它會問幾個會影響架構的問題（每個都說明為什麼問），
+        然後直接把架構畫到左邊的畫布上。</p>
+      <div class="chatlog" id="cLog"></div>
+      <textarea id="cq" placeholder="先講一下你的情境：什麼語料、誰在用、大概問什麼"></textarea>
+      <div class="row">
+        <button type="button" id="cGo">送出</button>
+        <span class="msg" id="cMsg"></span>
+      </div>
     </div>
   </section>
 </main>
@@ -538,7 +612,8 @@ function drawWires() {
     tag.className = 'elabel' + (e.label ? '' : ' empty');
     tag.style.left = p.mid[0] + 'px';
     tag.style.top = p.mid[1] + 'px';
-    tag.textContent = e.label || '＋條件';
+    tag.textContent = e.label ? (e.label.length > 12 ? e.label.slice(0, 12) + '…' : e.label) : '＋條件';
+    tag.title = e.label || '點一下寫條件';
     tag.onclick = ev => { ev.stopPropagation(); editLabel(e, tag); };
     cv.appendChild(tag);
   });
@@ -547,6 +622,7 @@ function drawWires() {
 function editLabel(e, tag) {
   const inp = document.createElement('input');
   inp.value = e.label;
+  inp.style.width = Math.max(9, Math.min(26, e.label.length + 4)) + 'rem';
   inp.placeholder = '例如：評分不足';
   tag.textContent = '';
   tag.appendChild(inp);
@@ -926,6 +1002,265 @@ function refreshPalette() {
   });
 }
 
+/* ══════════ 右欄分頁 ══════════ */
+
+document.querySelectorAll('.t2').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.t2').forEach(x => x.classList.toggle('on', x === t));
+    document.querySelectorAll('.tpane').forEach(x => x.classList.toggle('on', x.id === t.dataset.t));
+  };
+});
+const goTab = id => document.querySelector('.t2[data-t="' + id + '"]').click();
+
+/* ══════════ 自動排版：照連線把節點排成左到右 ══════════ */
+
+/* 節點是自由擺放的，但剛載入一份架構時沒有人擺過 ——
+   照圖的深度排一次，至少一眼看得出流向，之後使用者要怎麼拖都行。 */
+function autoLayout() {
+  const start = G.nodes.find(n => n.name === START);
+  const depth = { [start.id]: 0 };
+  const queue = [start.id];
+  while (queue.length) {
+    const id = queue.shift();
+    G.edges.filter(e => e.from === id).forEach(e => {
+      if (depth[e.to] === undefined || depth[e.to] < depth[id] + 1) {
+        // 折返邊不要把目標往後推，不然迴圈會把圖拉成一條長蛇
+        if (depth[e.to] === undefined) { depth[e.to] = depth[id] + 1; queue.push(e.to); }
+      }
+    });
+  }
+  const answer = G.nodes.find(n => n.name === ANSWER);
+  const others = G.nodes.filter(n => n.name !== ANSWER && depth[n.id] !== undefined);
+  const maxD = Math.max(0, ...others.map(n => depth[n.id]));
+  if (answer) depth[answer.id] = maxD + 1;      // 終點就該在最右邊
+  let orphan = 0;
+  const rows = {};
+  G.nodes.forEach(n => {
+    let d = depth[n.id];
+    if (d === undefined) { d = 0; n.y = 560 + orphan * 110; n.x = 300 + (orphan++) * 240; return; }
+    rows[d] = (rows[d] || 0);
+    n.x = 60 + d * 270;
+    n.y = 120 + rows[d] * 120;
+    rows[d]++;
+  });
+  render();
+  $('stage').scrollTo({ left: 0, top: 0 });
+}
+
+/* ══════════ 載入現成架構：照 policy 把線接回來 ══════════ */
+
+/* 十四個現成架構都是先有 policy 才有圖。載進畫布如果不接線，
+   使用者只會看到一堆散落的方塊，以為壞了。自己猜一條直線又是假的 ——
+   所以交給模型去讀那段 policy，它才是真正被執行的東西。 */
+function inferEdges(silent) {
+  const sp = spec();
+  const count = sp.modules.length + sp.builtin_tools.length + sp.mcp_tools.length;
+  if (!sp.policy || !count) { say('沒有 policy 或沒有模組，畫不出線', 'bad'); return; }
+  if (!silent) say('讀 policy 畫線中…（20–40 秒）');
+  $('sRedraw').disabled = true;
+  return fetch('/api/architect/graph', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ policy: sp.policy, modules: sp.modules,
+                           builtin_tools: sp.builtin_tools, mcp_tools: sp.mcp_tools }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+    .then(d => {
+      const byName = {};
+      G.nodes.forEach(n => { byName[n.name] = n.id; });
+      G.edges = [];
+      (d.edges || []).forEach(e => {
+        const a = byName[e.from], b = byName[e.to];
+        if (!a || !b || a === b) return;
+        const had = G.edges.find(x => x.from === a && x.to === b);
+        if (had) {
+          // 同一對節點之間只留一條線，兩條疊著畫看起來像畫錯
+          if (e.label && had.label.indexOf(e.label) < 0)
+            had.label = had.label ? had.label + '／' + e.label : e.label;
+          return;
+        }
+        G.edges.push({ id: 'e' + (G.seq++), from: a, to: b, label: e.label || '' });
+      });
+      autoLayout();
+      say(G.edges.length
+        ? '這些線是照 policy 畫的。policy 才是真的會被執行的東西，圖只是它的樣子。'
+        : 'policy 裡看不出明確的流程 —— 那通常表示它寫得不夠具體。', G.edges.length ? 'good' : 'bad');
+    })
+    .catch(err => say('畫線失敗：' + err, 'bad'))
+    .finally(() => { $('sRedraw').disabled = false; });
+}
+
+$('sRedraw').onclick = () => inferEdges(false);
+
+/* ══════════ 試跑：不用先存檔 ══════════ */
+
+const EXAMPLES = [
+  'hook 要怎麼擋住寫入 .env？',
+  '那個會擋東西的功能怎麼設？',
+  'sub-agent 跟 agent team 差在哪？',
+  '2026 年溫布頓男單冠軍是誰？',
+];
+$('rEx').innerHTML = EXAMPLES.map((q, i) =>
+  '<button type="button" data-i="' + i + '">' + esc(q) + '</button>').join('');
+$('rEx').querySelectorAll('button').forEach(b => {
+  b.onclick = () => { $('rq').value = EXAMPLES[+b.dataset.i]; };
+});
+
+$('rClear').onclick = () => { $('rTrace').innerHTML = ''; $('rAns').classList.add('hidden'); rSay(''); };
+function rSay(t, k) { $('rMsg').textContent = t; $('rMsg').className = 'msg' + (k ? ' ' + k : ''); }
+
+function rCard(kind, html) {
+  const d = document.createElement('div');
+  d.className = 'rstep ' + kind;
+  d.innerHTML = html;
+  $('rTrace').appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+  return d;
+}
+
+$('rGo').onclick = () => {
+  const q = $('rq').value.trim();
+  if (!q) return rSay('先打一個問題', 'bad');
+  const sp = spec();
+  if (!sp.modules.length && !sp.mcp_tools.length) return rSay('畫布上還沒有模組', 'bad');
+  if (!sp.policy) return rSay('policy 是空的 —— agent 會不知道什麼時候用哪個模組', 'bad');
+
+  $('rGo').disabled = true;
+  $('rTrace').innerHTML = '';
+  $('rAns').classList.add('hidden');
+  rSay('跑起來了…');
+  resetRuns();
+
+  fetch('/api/try', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q, spec: sp }),
+  }).then(res => {
+    if (!res.ok) return res.json().then(j => Promise.reject(j.detail || '跑不起來'));
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    const pump = () => reader.read().then(({ done, value }) => {
+      if (done) { $('rGo').disabled = false; return; }
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      parts.forEach(p => {
+        const line = p.split('\n').find(x => x.startsWith('data: '));
+        if (line) rHandle(JSON.parse(line.slice(6)));
+      });
+      return pump();
+    });
+    return pump();
+  }).catch(err => { rSay('失敗：' + err, 'bad'); $('rGo').disabled = false; });
+};
+
+const RUNS = {};
+function resetRuns() {
+  for (const k in RUNS) delete RUNS[k];
+  G.nodes.forEach(n => { const el = nodeEl(n.id); if (el) el.classList.remove('hot', 'ran'); });
+}
+function nodeEl(id) { return $('canvas').querySelector('.node[data-id="' + id + '"]'); }
+
+/** 跑到哪個模組，畫布上那一顆就亮起來 —— 這才看得出它走的順序跟你畫的一不一樣 */
+function light(tool) {
+  const n = G.nodes.find(x => x.name === tool ||
+    (META[x.name] && META[x.name].short === tool));
+  if (!n) return;
+  G.nodes.forEach(o => { const e = nodeEl(o.id); if (e) e.classList.remove('hot'); });
+  const el = nodeEl(n.id);
+  if (el) { el.classList.add('hot', 'ran'); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+}
+
+function rHandle(ev) {
+  if (ev.type === 'status' || ev.type === 'reasoning')
+    return rCard('think', esc(ev.text));
+  if (ev.type === 'tool_call') {
+    light(ev.tool);
+    return rCard('act',
+      '<div class="t">' + ev.step + '. ' + esc(ev.tool) + '</div>' +
+      '<div class="a">' + esc(JSON.stringify(ev.args)) + '</div>' +
+      '<div class="o" id="ro-' + ev.step + '">執行中…</div>');
+  }
+  if (ev.type === 'tool_result') {
+    const o = $('ro-' + ev.step);
+    if (o) o.textContent = ev.summary;
+    return;
+  }
+  if (ev.type === 'answer') {
+    $('rAns').textContent = ev.text;
+    $('rAns').classList.remove('hidden');
+    return;
+  }
+  if (ev.type === 'error') {
+    rCard('bad', '<b>錯誤</b> ' + esc(ev.text));
+    if (ev.fatal) { rSay('跑掛了', 'bad'); $('rGo').disabled = false; }
+    return;
+  }
+  if (ev.type === 'done') {
+    rSay(ev.turns + ' 次模組呼叫 · ' + (ev.elapsed_ms / 1000).toFixed(1) + ' 秒。'
+         + '順序跟你畫的一樣嗎？不一樣的話，問題在 policy 不在圖。', 'good');
+    $('rGo').disabled = false;
+  }
+}
+
+/* ══════════ 架構師：聊完直接畫到畫布上 ══════════ */
+
+const CHAT = { history: [], busy: false };
+
+function bub(who, text) {
+  const d = document.createElement('div');
+  d.className = 'bub ' + who;
+  d.textContent = text;
+  $('cLog').appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+  return d;
+}
+function cSay(t, k) { $('cMsg').textContent = t; $('cMsg').className = 'msg' + (k ? ' ' + k : ''); }
+
+bub('ai', '跟我說一下你的情境就好 —— 什麼樣的語料、誰在用、大概會問什麼。' +
+          '我會問幾個會影響架構的問題（每個都會說明為什麼問），然後直接畫到左邊的畫布上。');
+
+$('cGo').onclick = () => {
+  const t = $('cq').value.trim();
+  if (!t || CHAT.busy) return;
+  $('cq').value = '';
+  bub('me', t);
+  CHAT.history.push({ role: 'user', text: t });
+  CHAT.busy = true;
+  $('cGo').disabled = true;
+  const think = bub('ai', '想一下…');
+  cSay('');
+
+  fetch('/api/architect', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ history: CHAT.history }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+    .then(d => {
+      CHAT.history.push({ role: 'assistant', text: d.reply });
+      think.textContent = d.architecture
+        ? d.reply.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/, '').trim()
+        : d.reply;
+      if (d.architecture) applySpec(d.architecture);
+    })
+    .catch(err => { think.textContent = '失敗：' + err; })
+    .finally(() => { CHAT.busy = false; $('cGo').disabled = false; });
+};
+
+/** 把一份 spec 攤到畫布上：放節點、填欄位，然後照 policy 接線 */
+function applySpec(sp) {
+  reset();
+  $('sName').value = sp.name || '';
+  $('sOrch').value = sp.orchestration || '';
+  $('sPolicy').value = sp.policy || '';
+  $('sTurns').value = sp.max_turns || 12;
+  (sp.modules || []).concat(sp.builtin_tools || [], sp.mcp_tools || [])
+    .filter(m => META[m])
+    .forEach((m, i) => addNode(m, 300 + (i % 3) * 250, 120 + Math.floor(i / 3) * 120));
+  cSay('已經畫到左邊了，正在照 policy 接線…');
+  const done = inferEdges(true);
+  if (done) done.then(() => cSay('好了。切到「試跑」直接問一題，不用先存檔。', 'good'));
+  goTab('tSetup');
+}
+
 /* ══════════ 載入 / 存檔 ══════════ */
 
 $('sFrom').onchange = () => {
@@ -941,12 +1276,13 @@ $('sFrom').onchange = () => {
     G.seq = G.nodes.length + G.edges.length + 2;
     G.sel = G.selEdge = null;
     render();
+    $('stage').scrollTo({ left: 0, top: 0 });
     say('載入畫布。改完存成新的一份。');
     return;
   }
 
-  // 沒畫過圖的架構：依階段排一排，但**不要幫它連線** ——
-  // 它的流程寫在 policy 裡，猜出來的連線會是假的。
+  // 沒畫過圖的架構（十四個現成的都是）：先照階段擺好，再讀 policy 把線接回來。
+  // 不接線的話使用者只看到一堆散落的方塊，會以為壞了；自己猜一條直線又是假的。
   reset();
   const mods = (a.modules || []).concat(a.builtin_tools || [], a.mcp_tools || [])
                  .filter(m => META[m]);
@@ -954,10 +1290,11 @@ $('sFrom').onchange = () => {
   mods.forEach(m => {
     const c = STAGES.findIndex(s => s.stage === META[m].stage);
     col[c] = (col[c] || 0);
-    addNode(m, 300 + c * 250, 120 + col[c] * 110);
+    addNode(m, 120 + c * 250, 120 + col[c] * 120);
     col[c]++;
   });
-  say('這個架構的流程寫在 policy 裡，沒有畫過圖 —— 連線要你自己拉。');
+  $('stage').scrollTo({ left: 0, top: 0 });
+  inferEdges(false);
 };
 
 $('sClear').onclick = () => { $('sFrom').value = ''; reset(); say(''); };

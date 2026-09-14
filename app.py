@@ -507,6 +507,56 @@ async def export_notes() -> Response:
     )
 
 
+@app.post("/api/try")
+async def try_draft(body: dict = Body(...)) -> StreamingResponse:
+    """拿一份**還沒存檔**的架構直接跑一題。
+
+    Studio 上最缺的一件事：組到一半想知道它到底會不會動。
+    要先存檔才跑得動的話，選單很快就會被半成品塞滿。
+    """
+    spec = body.get("spec") or {}
+    question = str(body.get("q") or "").strip()
+    if not question:
+        raise HTTPException(400, "沒有問題可以跑")
+    spec.setdefault("name", "（草稿）")
+    spec.setdefault("paper", "Studio 草稿")
+    ok, why = architect.validate(spec)
+    if not ok:
+        raise HTTPException(400, why)
+    architecture = architect.to_architecture(spec)
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def emit(event: dict) -> None:
+        queue.put_nowait(event)
+
+    async def worker() -> None:
+        try:
+            emit({"type": "status",
+                  "text": f"草稿試跑：{architecture.name}｜{architecture.orchestration}｜"
+                          f"模組：{', '.join(architecture.modules + architecture.builtin_tools + architecture.mcp_tools)}"})
+            await RUN(question, INDEX, emit, architecture)
+        except Exception as exc:  # noqa: BLE001
+            emit({"type": "error", "text": f"{type(exc).__name__}: {exc}", "fatal": True})
+        finally:
+            queue.put_nowait(None)
+
+    asyncio.create_task(worker())
+
+    async def stream():
+        while True:
+            event = await queue.get()
+            if event is None:
+                return
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # ══════════ 軌跡：存檔與重播 ══════════
 
 
@@ -563,6 +613,20 @@ async def architect_policy(body: dict = Body(...)) -> dict:
     if not mods:
         raise HTTPException(400, "至少要選一個模組")
     return await architect.write_policy(mods, builtin, str(body.get("note") or ""))
+
+
+@app.post("/api/architect/graph")
+async def architect_graph(body: dict = Body(...)) -> dict:
+    """把一段 policy 讀成一張圖。Studio 載入現成架構時用 —— 它們都是先有 policy 才有圖。"""
+    policy = str(body.get("policy") or "").strip()
+    if not policy:
+        raise HTTPException(400, "沒有 policy 就沒有流程可以畫")
+    return await architect.graph_from_policy(
+        policy,
+        [m for m in (body.get("modules") or []) if m in MODULES],
+        [b for b in (body.get("builtin_tools") or []) if b in BUILTIN_TOOLS],
+        list(body.get("mcp_tools") or []),
+    )
 
 
 @app.post("/api/architect/save")

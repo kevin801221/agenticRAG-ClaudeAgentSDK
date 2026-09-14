@@ -208,6 +208,89 @@ async def write_policy(modules: list[str], builtin: list[str], note: str = "") -
     return {"policy": reply, "orchestration": "", "why": ""}
 
 
+GRAPH_SYSTEM = """你的工作是把一段 RAG 編排規則（policy）**讀成一張流程圖**。
+
+policy 才是真正被執行的東西，圖只是它的視覺化 —— 所以你不可以自己發明流程，
+只能把 policy 裡已經寫的東西畫出來。policy 沒講的分支就不要畫。
+
+## 可以用的節點
+
+- `__start__` 問題進來（一定有，而且只有一個）
+- `__answer__` 產生答案（一定有，而且只有一個）
+- 以下模組（只能用這些，一個都不能多）：
+{picked}
+
+## 輸出
+
+只輸出一個 JSON code block：
+
+```json
+{{
+  "edges": [
+    {{"from": "__start__", "to": "search", "label": ""}},
+    {{"from": "search", "to": "grade_documents", "label": ""}},
+    {{"from": "grade_documents", "to": "__answer__", "label": "有夠好的片段"}},
+    {{"from": "grade_documents", "to": "search", "label": "多數不合格，最多重來兩輪"}}
+  ]
+}}
+```
+
+規則：
+
+- `label` 寫**判斷條件**，照 policy 的原文寫，不要自己換句話說。無條件的邊留空字串。
+- 同一個節點有多條出邊時，每一條都要有 label —— 沒有條件的分支等於沒說清楚。
+- policy 裡如果有「不合格就重查」這種回頭的描述，就畫一條指回去的邊（折返）。
+- 每個模組都要至少出現一次。如果某個模組在 policy 裡根本沒被提到，
+  還是把它畫成從 `__start__` 進不去的孤立節點 —— 那是 policy 的問題，不要幫它補。
+"""
+
+
+async def graph_from_policy(policy: str, modules: list[str], builtin: list[str],
+                            mcp: list[str]) -> dict:
+    """policy -> 圖。
+
+    這是 Studio 那條「圖編譯成 policy」的反方向。會需要它，是因為十四個現成架構
+    都是先有 policy 才有圖 —— 載進畫布時如果不接線，使用者只會看到一堆散落的方塊，
+    以為東西壞了。自己猜一條直線又是假的，所以交給模型去讀那段 policy。
+    """
+    from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
+
+    known = {**MODULES, **BUILTIN_TOOLS}
+    names = list(modules) + list(builtin) + list(mcp)
+    picked = "\n".join(
+        f"- `{n}`" + (f"（{known[n]['stage']}）{known[n]['description'].split('。')[0]}。"
+                      if n in known else "（外部 MCP 工具）")
+        for n in names
+    ) or "（沒有模組）"
+
+    out = []
+    async for msg in query(
+        prompt=f"這是 policy：\n\n{policy.strip()}\n\n（把它畫成圖，只輸出 JSON code block。）",
+        options=ClaudeAgentOptions(
+            tools=[], setting_sources=[], max_turns=1,
+            system_prompt=GRAPH_SYSTEM.format(picked=picked),
+        ),
+    ):
+        if isinstance(msg, AssistantMessage):
+            out += [b.text for b in msg.content if isinstance(b, TextBlock)]
+
+    reply = "\n".join(out).strip()
+    ok = set(names) | {"__start__", "__answer__"}
+    for m in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", reply, re.S):
+        try:
+            got = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            continue
+        edges = [
+            {"from": e["from"], "to": e["to"], "label": str(e.get("label") or "")}
+            for e in (got.get("edges") or [])
+            if isinstance(e, dict) and e.get("from") in ok and e.get("to") in ok
+        ]
+        if edges:
+            return {"edges": edges}
+    return {"edges": []}
+
+
 def validate(spec: dict) -> tuple[bool, str]:
     """存之前檢查一遍 —— agent 有時會發明不存在的模組。"""
     if not str(spec.get("name", "")).strip():
