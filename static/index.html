@@ -40,11 +40,28 @@
   .badge.warn{border-color:var(--alert);color:var(--alert)}
 
   /* ── 流程圖 ──────────────────────────── */
-  .pipe{
-    border-bottom:1px solid var(--rail);background:var(--panel);
-    padding:.4rem 1rem .2rem;overflow-x:auto;
+  .pipe{border-bottom:1px solid var(--rail);background:var(--panel)}
+  .pipe-bar{
+    display:flex;align-items:center;gap:.6rem;width:100%;
+    padding:.5rem 1.5rem;background:none;border:0;color:var(--muted);
+    font:inherit;font-size:.85rem;text-align:left;cursor:pointer;
   }
+  .pipe-bar:hover{color:var(--ink)}
+  .caret{display:inline-block;font-size:.7rem;transition:transform .2s}
+  .pipe:not(.collapsed) .caret{transform:rotate(90deg)}
+  .pipe-title{font-weight:600;color:var(--ink)}
+  .pipe-meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pipe-meta.live{color:var(--signal)}
+  .pipe-body{
+    overflow:hidden auto;max-height:64vh;opacity:1;
+    padding:0 1rem .3rem;transition:max-height .3s ease,opacity .22s ease,padding .3s ease;
+  }
+  .pipe.collapsed .pipe-body{max-height:0;opacity:0;padding-top:0;padding-bottom:0}
   .pipe svg{display:block;width:100%;min-width:760px;height:auto}
+  @media (prefers-reduced-motion:reduce){
+    .pipe-body{transition:none}
+  }
 
   .stage-label{font:600 11px var(--sans);fill:var(--muted);letter-spacing:.08em}
   .stage-band{fill:var(--panel-2);opacity:0;transition:opacity .3s}
@@ -225,7 +242,16 @@
   <span class="badge" id="engine">—</span>
 </header>
 
-<section class="pipe"><svg id="pipe" role="img" aria-label="RAG 流程圖，執行中的模組會亮起"></svg></section>
+<section class="pipe collapsed" id="pipeWrap">
+  <button class="pipe-bar" id="pipeToggle" type="button" aria-expanded="false" aria-controls="pipeBody">
+    <span class="caret" aria-hidden="true">▸</span>
+    <span class="pipe-title">流程圖</span>
+    <span class="pipe-meta" id="pipeMeta">—</span>
+  </button>
+  <div class="pipe-body" id="pipeBody">
+    <svg id="pipe" role="img" aria-label="RAG 流程圖，執行中的模組會亮起"></svg>
+  </div>
+</section>
 
 <main>
   <section class="col ask">
@@ -264,6 +290,8 @@ const $ = id => document.getElementById(id);
 const SVG = 'http://www.w3.org/2000/svg';
 const trace = $('trace'), answerEl = $('answer'), sourceView = $('sourceView');
 let ARCHS = [], STAGES = [], NODES = {}, lastNode = null, lastTool = null, FLOOR = 0;
+// 使用者手動打開的話，跑完就不要自動收回去 —— 他正在看
+let pipePinned = false;
 
 const EXAMPLES = [
   'hook 要怎麼擋住寫入 .env？',
@@ -322,7 +350,7 @@ function buildPipe(stages) {
       if (m.builtin) add('text', { class: 'ntag', x: nx + nw - 30, y: ny + 35 }, g).textContent = 'SDK';
       add('circle', { class: 'ncountbg', cx: nx + nw - 15, cy: ny + 15, r: 9 }, g);
       const cnt = add('text', { class: 'ncount', x: nx + nw - 15, y: ny + 18.5, 'text-anchor': 'middle' }, g);
-      NODES[m.name] = { g: g, cnt: cnt, runs: 0, col: c,
+      NODES[m.name] = { g: g, cnt: cnt, runs: 0, col: c, name: m.name,
                         cx: nx + nw / 2, cy: ny + NH / 2,
                         left: nx, right: nx + nw, bottom: ny + NH };
     });
@@ -351,6 +379,40 @@ function paintArchitecture(arch) {
     .forEach(m => { allowed[m] = 1; });
   for (const name in NODES) NODES[name].g.classList.toggle('off', !allowed[name]);
 }
+
+function setPipeOpen(open) {
+  const wrap = $('pipeWrap');
+  wrap.classList.toggle('collapsed', !open);
+  $('pipeToggle').setAttribute('aria-expanded', String(open));
+}
+
+function totalCalls() {
+  return Object.values(NODES).reduce((n, x) => n + (x.name === 'answer' ? 0 : x.runs), 0);
+}
+
+function pipeIsOpen() {
+  return !$('pipeWrap').classList.contains('collapsed');
+}
+
+/** 收起來的時候，標題列要看得出「現在在哪一步」，不然收合等於看不到 */
+function pipeMeta(text, live) {
+  const el = $('pipeMeta');
+  el.textContent = text;
+  el.classList.toggle('live', !!live);
+}
+
+function archLabel() {
+  const a = ARCHS.filter(x => x.key === $('arch').value)[0];
+  if (!a) return '';
+  const n = a.modules.length + (a.builtin_tools || []).length;
+  return `${a.name} · ${n} 個模組`;
+}
+
+$('pipeToggle').onclick = () => {
+  const open = !pipeIsOpen();
+  setPipeOpen(open);
+  pipePinned = open;          // 手動打開 = 釘住；手動關掉 = 解除
+};
 
 function resetPipe() {
   for (const name in NODES) {
@@ -381,6 +443,7 @@ function activate(name) {
   n.cnt.textContent = n.runs;
   restart(n.g, 'pop');
   STAGES.forEach((_, c) => $('band-' + c).classList.toggle('hot', c === n.col));
+  pipeMeta(`${archLabel()} · 第 ${totalCalls()} 步：${name}`, true);
   lastNode = n;
 }
 
@@ -472,6 +535,7 @@ function showArch() {
   const a = ARCHS.filter(x => x.key === $('arch').value)[0];
   if (!a) return;
   paintArchitecture(a);
+  if (!pipeIsOpen()) pipeMeta(archLabel());
   $('archinfo').innerHTML =
     esc(a.orchestration) + '　模組：<code>' +
     a.modules.concat(a.builtin_tools || []).map(esc).join('</code> <code>') + '</code>';
@@ -490,6 +554,8 @@ function ask(question) {
   $('go').disabled = true;
   $('go').textContent = '思考中…';
   resetPipe();
+  setPipeOpen(true);
+  pipeMeta(archLabel() + ' · 執行中', true);
 
   const es = new EventSource('/api/ask?q=' + encodeURIComponent(question)
                              + '&arch=' + encodeURIComponent($('arch').value));
@@ -545,6 +611,9 @@ function handle(ev, es) {
   }
 
   if (ev.type === 'done') {
+    pipeMeta(`${archLabel()} · 完成 ${ev.turns} 次呼叫 · ${(ev.elapsed_ms / 1000).toFixed(1)} 秒`);
+    // 留 1.8 秒讓最後一步看得完，再收回去。使用者自己打開的就不要動它。
+    if (!pipePinned) setTimeout(() => { if (!pipePinned) setPipeOpen(false); }, 1800);
     card('think', '<div class="why">完成：' + esc(ev.architecture || '') + ' · ' + ev.turns +
                   ' 次模組呼叫 · ' + (ev.elapsed_ms / 1000).toFixed(1) + ' 秒</div>');
     finish(es);
