@@ -121,9 +121,69 @@
   }
 
   /* ── 主要兩欄：軌跡比對話寬，因為過程才是主角 ── */
-  main{flex:1;display:grid;grid-template-columns:minmax(0,4fr) minmax(0,6fr);min-height:0}
+  main{flex:1;display:grid;grid-template-columns:var(--split,42%) 7px minmax(0,1fr);min-height:0}
   .col{padding:1.25rem 1.5rem;overflow-y:auto;min-height:0}
-  .col.ask{border-right:1px solid var(--rail)}
+
+  /* 拖曳分隔線：字太小就把左邊拉寬 */
+  .splitter{background:var(--rail);cursor:col-resize;position:relative;transition:background .15s}
+  .splitter::after{content:"";position:absolute;inset:0 -5px}   /* 抓取範圍比視覺寬，好拉 */
+  .splitter:hover,.splitter.dragging{background:var(--signal)}
+  .splitter:focus-visible{outline:2px solid var(--signal);outline-offset:1px}
+  body.resizing{cursor:col-resize;user-select:none}
+  body.resizing .pagewrap{pointer-events:none}
+
+  /* ── 文件檢視器 ── */
+  .docbar{
+    display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+    padding-bottom:.7rem;margin-bottom:.8rem;border-bottom:1px solid var(--rail);
+  }
+  .docbar .name{font-family:var(--mono);font-size:.85rem;font-weight:600;flex:1;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .docbar button{
+    padding:.2rem .6rem;font-size:.8rem;font-weight:400;align-self:auto;
+    background:var(--panel-2);color:var(--ink);border:1px solid var(--rail);
+  }
+  .docbar button:hover:not([disabled]){border-color:var(--signal)}
+  .docbar button[disabled]{opacity:.4;cursor:not-allowed}
+  .docbar .pageno{font-family:var(--mono);font-size:.8rem;color:var(--muted);min-width:4.5rem;text-align:center}
+
+  .pagewrap{position:relative;margin:0 auto 1rem;background:#fff;border-radius:3px;
+    box-shadow:0 2px 12px rgba(0,0,0,.45);max-width:100%}
+  .pagewrap img{display:block;width:100%;height:auto;border-radius:3px}
+  .tlayer{position:absolute;inset:0}
+  .tlayer span{position:absolute;color:transparent;white-space:pre;cursor:text;line-height:1}
+  .tlayer span::selection{background:rgba(242,180,65,.45)}
+  .doctext{white-space:pre-wrap;font-size:.95rem;line-height:1.75}
+  .doctext h4{margin:1.2rem 0 .3rem;font-size:.88rem;color:var(--signal);font-family:var(--mono)}
+  .doctext ::selection,.doctext::selection{background:rgba(242,180,65,.42)}
+  .dochint{color:var(--muted);font-size:.82rem;margin:0 0 .8rem}
+
+  /* ── 文件問答（右欄）── */
+  .anchor{
+    display:flex;gap:.5rem;align-items:flex-start;margin-bottom:.6rem;padding:.5rem .7rem;
+    border-left:3px solid var(--signal);background:rgba(242,180,65,.08);border-radius:0 4px 4px 0;
+  }
+  .anchor .txt{flex:1;font-size:.85rem;max-height:6.5rem;overflow-y:auto;white-space:pre-wrap}
+  .anchor .lbl{font-size:.72rem;color:var(--signal);font-weight:600;display:block;margin-bottom:.2rem}
+  .anchor .x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:1rem;
+    padding:0 .2rem;align-self:flex-start}
+  .anchor .x:hover{color:var(--alert)}
+  .chatlog{display:flex;flex-direction:column;gap:.9rem;margin-bottom:1rem}
+  .msg{font-size:.95rem}
+  .msg.me{padding:.6rem .8rem;border-radius:5px;background:var(--panel-2);border:1px solid var(--rail)}
+  .msg.me .q{white-space:pre-wrap}
+  .msg.me .anchored{font-size:.8rem;color:var(--muted);border-left:2px solid var(--signal);
+    padding-left:.5rem;margin-bottom:.4rem;max-height:4.5rem;overflow:hidden}
+  .msg.ai .steps{font-size:.8rem;color:var(--muted);font-family:var(--mono);margin-bottom:.4rem}
+  .msg.ai .body{white-space:pre-line}
+  .msg.ai .body h3{font-size:.95rem;margin:.9rem 0 .25rem;color:var(--signal)}
+  .msg.ai .body ul{margin:.25rem 0;padding-left:1.2rem}
+  .msg.ai .body li{white-space:normal}
+  .msg.ai .body pre{white-space:pre;margin:.5rem 0;border-radius:4px}
+  .msg.ai .body code{font-family:var(--mono);font-size:.85em;background:var(--panel);padding:.1rem .3rem;border-radius:3px}
+  .msg.ai .body table{border-collapse:collapse;margin:.5rem 0;font-size:.88rem;white-space:normal;width:100%}
+  .msg.ai .body th,.msg.ai .body td{border:1px solid var(--rail);padding:.3rem .5rem;text-align:left;vertical-align:top}
+  .hidden{display:none !important}
 
   .lede{color:var(--muted);margin:0 0 1rem;max-width:46ch;font-size:.92rem}
   form{display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.1rem}
@@ -269,7 +329,8 @@
 </section>
 
 <main>
-  <section class="col ask">
+  <section class="col ask" id="leftCol">
+    <div id="askView">
     <p class="lede">問一個關於 Claude Code 的問題。上面的流程圖會顯示它走到哪一步。</p>
 
     <form id="form">
@@ -284,12 +345,43 @@
     <h2>答案</h2>
     <div class="answer" id="answer"></div>
     <div id="sourceView"></div>
+    </div><!-- /askView -->
+
+    <div id="docView" class="hidden">
+      <div class="docbar">
+        <span class="name" id="docName"></span>
+        <button type="button" id="pagePrev" title="上一頁">‹</button>
+        <span class="pageno" id="pageNo"></span>
+        <button type="button" id="pageNext" title="下一頁">›</button>
+        <button type="button" id="docClose">關閉文件</button>
+      </div>
+      <p class="dochint">用滑鼠圈選任何一段，右邊就會錨定它 —— 接著直接問。</p>
+      <div id="docBody"></div>
+    </div>
   </section>
 
+  <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"
+       aria-label="調整左右兩區寬度" tabindex="0"></div>
+
   <section class="col">
-    <h2>決策軌跡</h2>
-    <div class="trace" id="trace"></div>
-    <p class="empty" id="empty">還沒開始。每次 agent 選一個做法、呼叫一個模組，上面會亮、這裡會長出一段。</p>
+    <div id="traceView">
+      <h2>決策軌跡</h2>
+      <div class="trace" id="trace"></div>
+      <p class="empty" id="empty">還沒開始。每次 agent 選一個做法、呼叫一個模組，上面會亮、這裡會長出一段。</p>
+    </div>
+
+    <div id="docChat" class="hidden">
+      <h2>問這份文件</h2>
+      <div class="chatlog" id="chatLog"></div>
+      <div class="anchor hidden" id="anchorBox">
+        <div class="txt"><span class="lbl">已錨定這段</span><span id="anchorText"></span></div>
+        <button class="x" type="button" id="anchorClear" title="取消錨定">✕</button>
+      </div>
+      <form id="docForm">
+        <textarea id="docQ" placeholder="圈選一段再問，或直接問這份文件的任何問題" required></textarea>
+        <button id="docGo" type="submit">問</button>
+      </form>
+    </div>
   </section>
 </main>
 
@@ -660,17 +752,256 @@ fetch('/api/corpus').then(r => r.json()).then(list => {
 
   $('corpusList').querySelectorAll('.cfile').forEach(b => {
     b.onclick = () => {
-      const path = b.dataset.path;
-      if (b.classList.contains('pdf')) {
-        renderSource({ path: path, page: 1, is_pdf: true, text: '', heading: '' });
-      } else {
-        // markdown 沒有閱讀器，就把第一段叫出來當入口
-        showSource(path + '#0');
-      }
-      document.querySelector('.col.ask').scrollTo({ top: 1e6, behavior: 'smooth' });
+      openDoc(b.dataset.path, b.classList.contains('pdf'), 1);
+      $('leftCol').scrollTo({ top: 0 });
+      document.querySelectorAll('footer details').forEach(d => { d.open = false; });
     };
   });
 });
+
+/* ══════════ 可拖曳分隔線 ══════════ */
+
+(function () {
+  const main = document.querySelector('main');
+  const bar = $('splitter');
+  const MIN = 22, MAX = 78;          // 百分比，不讓任一邊被壓到看不見
+
+  function setSplit(pct) {
+    main.style.setProperty('--split', Math.min(MAX, Math.max(MIN, pct)) + '%');
+  }
+  try {
+    const saved = localStorage.getItem('split');
+    if (saved) setSplit(parseFloat(saved));
+  } catch (e) {}
+
+  let dragging = false;
+  const move = e => {
+    if (!dragging) return;
+    const r = main.getBoundingClientRect();
+    setSplit(((e.clientX - r.left) / r.width) * 100);
+  };
+  const stop = () => {
+    if (!dragging) return;
+    dragging = false;
+    bar.classList.remove('dragging');
+    document.body.classList.remove('resizing');
+    try {
+      localStorage.setItem('split', parseFloat(main.style.getPropertyValue('--split')));
+    } catch (e) {}
+  };
+
+  bar.addEventListener('mousedown', e => {
+    dragging = true; e.preventDefault();
+    bar.classList.add('dragging');
+    document.body.classList.add('resizing');
+  });
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', stop);
+
+  // 鍵盤也要能調（分隔線是可 focus 的）
+  bar.addEventListener('keydown', e => {
+    const cur = parseFloat(main.style.getPropertyValue('--split') || '42');
+    if (e.key === 'ArrowLeft') { setSplit(cur - 3); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { setSplit(cur + 3); e.preventDefault(); }
+  });
+})();
+
+/* ══════════ 文件檢視器 ══════════ */
+
+const DOC = { path: null, page: 1, pages: 1, isPdf: false };
+
+function openDoc(path, isPdf, page) {
+  DOC.path = path; DOC.isPdf = isPdf; DOC.page = page || 1;
+  $('askView').classList.add('hidden');
+  $('traceView').classList.add('hidden');
+  $('docView').classList.remove('hidden');
+  $('docChat').classList.remove('hidden');
+  $('docName').textContent = path;
+  clearAnchor();
+  $('chatLog').innerHTML = '';
+  renderDoc();
+  $('docQ').focus();
+}
+
+function closeDoc() {
+  DOC.path = null;
+  $('docView').classList.add('hidden');
+  $('docChat').classList.add('hidden');
+  $('askView').classList.remove('hidden');
+  $('traceView').classList.remove('hidden');
+  clearAnchor();
+}
+
+$('docClose').onclick = closeDoc;
+$('pagePrev').onclick = () => gotoPage(DOC.page - 1);
+$('pageNext').onclick = () => gotoPage(DOC.page + 1);
+
+function gotoPage(n) {
+  if (!DOC.isPdf || n < 1 || n > DOC.pages) return;
+  DOC.page = n;
+  renderDoc();
+}
+
+function renderDoc() {
+  const body = $('docBody');
+  const nav = DOC.isPdf;
+  $('pagePrev').classList.toggle('hidden', !nav);
+  $('pageNext').classList.toggle('hidden', !nav);
+  $('pageNo').classList.toggle('hidden', !nav);
+
+  if (!DOC.isPdf) {
+    body.innerHTML = '<div class="doctext">載入中…</div>';
+    fetch('/api/doc?path=' + encodeURIComponent(DOC.path))
+      .then(r => r.json())
+      .then(d => {
+        body.innerHTML = '<div class="doctext">' + d.chunks.map(c =>
+          '<h4>' + esc(c.heading) + '</h4>' + esc(c.text)).join('\n\n') + '</div>';
+      });
+    return;
+  }
+
+  body.innerHTML = '<div class="pagewrap" id="pageWrap"><img id="pageImg" alt="第 ' + DOC.page + ' 頁"></div>';
+  const wrap = $('pageWrap'), img = $('pageImg');
+
+  Promise.all([
+    new Promise(res => { img.onload = res; img.src = '/api/page?path=' +
+      encodeURIComponent(DOC.path) + '&page=' + DOC.page; }),
+    fetch('/api/words?path=' + encodeURIComponent(DOC.path) + '&page=' + DOC.page).then(r => r.json()),
+  ]).then(([, d]) => {
+    DOC.pages = d.pages;
+    $('pageNo').textContent = DOC.page + ' / ' + d.pages;
+    $('pagePrev').disabled = DOC.page <= 1;
+    $('pageNext').disabled = DOC.page >= d.pages;
+    layoutWords(wrap, d);
+  });
+}
+
+/** 在頁面圖片上疊一層透明的字 —— 這樣圈選就是原生的網頁選取。
+ *  Chrome 內建的 PDF 檢視器是獨立程序，外面碰不到它的選取，所以才要自己疊。 */
+function layoutWords(wrap, d) {
+  const scale = wrap.clientWidth / d.width;      // PDF point → CSS px
+  const layer = document.createElement('div');
+  layer.className = 'tlayer';
+  let lastLine = null;
+  layer.innerHTML = d.words.map(w => {
+    // 換行時補一個換行字元，選取跨行才不會全部黏在一起
+    const br = (lastLine !== null && w.line !== lastLine) ? '\n' : '';
+    lastLine = w.line;
+    return '<span style="left:' + (w.x * scale).toFixed(1) + 'px;top:' + (w.y * scale).toFixed(1) +
+      'px;width:' + (w.w * scale).toFixed(1) + 'px;height:' + (w.h * scale).toFixed(1) +
+      'px;font-size:' + (w.h * scale * 0.86).toFixed(1) + 'px">' + esc(br + w.t + ' ') + '</span>';
+  }).join('');
+  wrap.appendChild(layer);
+}
+
+// 視窗或分隔線變動時，文字層要跟著重算
+let relayout;
+window.addEventListener('resize', () => {
+  clearTimeout(relayout);
+  relayout = setTimeout(() => { if (DOC.path && DOC.isPdf) renderDoc(); }, 250);
+});
+
+/* ══════════ AI Anchor：圈選就錨定 ══════════ */
+
+let anchorText = '';
+
+function clearAnchor(keepSelection) {
+  anchorText = '';
+  $('anchorBox').classList.add('hidden');
+  $('anchorText').textContent = '';
+  // 連 DOM 的選取一起清掉，否則下一次 mouseup 會把同一段再錨定一次
+  if (!keepSelection) { try { window.getSelection().removeAllRanges(); } catch (e) {} }
+}
+
+$('anchorClear').onclick = clearAnchor;
+
+$('docView').addEventListener('mouseup', e => {
+  // 只有在文字上放開滑鼠才算圈選。少了這個判斷，任何一次 mouseup
+  // 都會把殘留的選取重新錨定一次 —— 送出之後錨定框會自己冒回來。
+  if (!e.target.closest('.tlayer, .doctext')) return;
+  setTimeout(() => {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const el = node && (node.nodeType === 1 ? node : node.parentNode);
+    if (!el || !$('docView').contains(el)) return;      // 選取必須在文件裡
+
+    const t = (sel.toString() || '').replace(/[ \t]+\n/g, '\n').trim();
+    if (t.length < 2) return;                           // 點一下不算圈選
+    anchorText = t.slice(0, 4000);
+    $('anchorText').textContent = anchorText;
+    $('anchorBox').classList.remove('hidden');
+    $('docQ').focus();
+  }, 10);
+});
+
+/* ══════════ 文件問答 ══════════ */
+
+$('docForm').onsubmit = ev => {
+  ev.preventDefault();
+  const q = $('docQ').value.trim();
+  if (!q || !DOC.path) return;
+  askDoc(q, anchorText);
+};
+
+function askDoc(q, anchored) {
+  const log = $('chatLog');
+
+  const me = document.createElement('div');
+  me.className = 'msg me';
+  me.innerHTML = (anchored ? '<div class="anchored">' + esc(anchored) + '</div>' : '') +
+                 '<div class="q">' + esc(q) + '</div>';
+  log.appendChild(me);
+
+  const ai = document.createElement('div');
+  ai.className = 'msg ai';
+  ai.innerHTML = '<div class="steps">思考中…</div><div class="body"></div>';
+  log.appendChild(ai);
+  ai.scrollIntoView({ block: 'nearest' });
+
+  $('docQ').value = '';
+  $('docGo').disabled = true;
+  clearAnchor();
+
+  const steps = [];
+  const es = new EventSource('/api/ask?arch=doc_chat' +
+    '&q=' + encodeURIComponent(q) +
+    '&scope=' + encodeURIComponent(DOC.path) +
+    '&selection=' + encodeURIComponent(anchored || ''));
+
+  es.onmessage = m => {
+    const ev = JSON.parse(m.data);
+    if (ev.type === 'tool_call') {
+      steps.push(ev.tool);
+      ai.querySelector('.steps').textContent = steps.join(' → ');
+    } else if (ev.type === 'answer') {
+      ai.querySelector('.body').innerHTML = md(ev.text).replace(/\[([^\[\]\s]+#\d+)\]/g,
+        (_, id) => '<span class="cite" data-id="' + id + '">' + id + '</span>');
+      ai.querySelectorAll('.cite').forEach(el => {
+        el.onclick = () => jumpToCitation(el.dataset.id);
+      });
+    } else if (ev.type === 'done') {
+      ai.querySelector('.steps').textContent =
+        (steps.length ? steps.join(' → ') + ' · ' : '') + (ev.elapsed_ms / 1000).toFixed(1) + ' 秒';
+      es.close();
+      $('docGo').disabled = false;
+      ai.scrollIntoView({ block: 'nearest' });
+    } else if (ev.type === 'error' && ev.fatal) {
+      ai.querySelector('.body').textContent = '出錯了：' + ev.text;
+      es.close();
+      $('docGo').disabled = false;
+    }
+  };
+  es.onerror = () => { es.close(); $('docGo').disabled = false; };
+}
+
+/** 文件問答裡點出處 → 直接翻到那一頁 */
+function jumpToCitation(id) {
+  fetch('/api/chunk?id=' + encodeURIComponent(id))
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(c => { if (c.page && c.path === DOC.path) gotoPage(c.page); })
+    .catch(() => {});
+}
 
 /** 把一個片段（或一整份 PDF）畫進出處面板。showSource 與語料瀏覽器共用。 */
 function renderSource(c) {
@@ -694,7 +1025,11 @@ function renderSource(c) {
 function showSource(id) {
   fetch('/api/chunk?id=' + encodeURIComponent(id))
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(renderSource)
+    .then(c => {
+      // PDF 出處直接開文件檢視器 —— 在那邊才圈選得到、也才翻得了頁
+      if (c.is_pdf && c.page) { openDoc(c.path, true, c.page); return; }
+      renderSource(c);
+    })
     .catch(() => {
       sourceView.innerHTML = '<div class="source-view"><div class="path">找不到片段 ' + esc(id) +
         '</div>模型引用了不存在的 id —— 這正是要提醒學生檢查的地方。</div>';

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 load_dotenv()
 
@@ -71,18 +71,23 @@ async def chunk(id: str) -> dict:
     }
 
 
-@app.get("/api/pdf")
-async def pdf(path: str) -> FileResponse:
-    """把語料裡的 PDF 交給瀏覽器內建的閱讀器顯示。
+def _corpus_pdf(path: str) -> Path:
+    """把使用者給的相對路徑解析成 corpus/ 底下的實體 PDF。
 
-    只開放 corpus/ 底下的 .pdf —— resolve 之後再比對父目錄，擋掉 ../ 這類路徑穿越。
+    只開放 corpus/ 底下的 .pdf —— resolve 之後比對父目錄，擋掉 ../ 這類路徑穿越。
     """
     if not path.lower().endswith(".pdf"):
         raise HTTPException(400, "只提供 PDF")
     target = (CORPUS_DIR / path).resolve()
     if CORPUS_DIR not in target.parents or not target.is_file():
         raise HTTPException(404, f"找不到 {path}")
-    return FileResponse(target, media_type="application/pdf")
+    return target
+
+
+@app.get("/api/pdf")
+async def pdf(path: str) -> FileResponse:
+    """原始 PDF 檔（給「在新分頁開啟」用）。"""
+    return FileResponse(_corpus_pdf(path), media_type="application/pdf")
 
 
 STAGE_ORDER = ["Indexing", "Pre-retrieval", "Retrieval", "Post-retrieval"]
@@ -125,6 +130,58 @@ async def corpus() -> list[dict]:
     return sorted(files.values(), key=lambda f: (not f["is_pdf"], f["path"]))
 
 
+@app.get("/api/page")
+async def page_image(path: str, page: int) -> Response:
+    """把 PDF 的某一頁算成 PNG。
+
+    為什麼不直接用瀏覽器內建的 PDF 檢視器：那是獨立的外掛程序，
+    外面的網頁碰不到它的文字選取，做不了「圈選問 AI」。
+    改成「頁面圖片 + 透明文字層」之後，選取就是原生的網頁選取。
+    """
+    target = _corpus_pdf(path)
+    import pymupdf
+
+    with pymupdf.open(target) as doc:
+        if not 1 <= page <= doc.page_count:
+            raise HTTPException(404, f"{path} 沒有第 {page} 頁（共 {doc.page_count} 頁）")
+        png = doc[page - 1].get_pixmap(dpi=110).tobytes("png")
+    return Response(png, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/words")
+async def page_words(path: str, page: int) -> dict:
+    """那一頁每個詞的座標（PDF point 為單位）。前端拿它疊出可選取的文字層。"""
+    target = _corpus_pdf(path)
+    import pymupdf
+
+    with pymupdf.open(target) as doc:
+        if not 1 <= page <= doc.page_count:
+            raise HTTPException(404, f"{path} 沒有第 {page} 頁")
+        pg = doc[page - 1]
+        words = [
+            {"x": round(w[0], 1), "y": round(w[1], 1),
+             "w": round(w[2] - w[0], 1), "h": round(w[3] - w[1], 1),
+             "t": w[4], "line": w[6]}
+            for w in pg.get_text("words")
+        ]
+        return {"page": page, "pages": doc.page_count,
+                "width": round(pg.rect.width, 1), "height": round(pg.rect.height, 1),
+                "words": words}
+
+
+@app.get("/api/doc")
+async def doc_text(path: str) -> dict:
+    """非 PDF 的語料，把整份文字按片段回傳，前端一樣可以圈選。"""
+    chunks = [c for c in INDEX.chunks if c.path == path]
+    if not chunks:
+        raise HTTPException(404, f"語料裡沒有 {path}")
+    return {
+        "path": path,
+        "chunks": [{"chunk_id": c.id, "heading": c.heading, "text": c.text} for c in chunks],
+    }
+
+
 @app.get("/api/architectures")
 async def architectures() -> list[dict]:
     """七個現成架構。前端做成選單，學生可以當場切換比較軌跡。"""
@@ -143,10 +200,19 @@ async def architectures() -> list[dict]:
 
 
 @app.get("/api/ask")
-async def ask(q: str, arch: str = "modular") -> StreamingResponse:
+async def ask(q: str, arch: str = "modular", scope: str = "", selection: str = "") -> StreamingResponse:
     architecture = ARCHITECTURES.get(arch)
     if architecture is None:
         raise HTTPException(400, f"沒有這個架構：{arch}（可用：{list(ARCHITECTURES)}）")
+
+    # 文件問答：把「現在開著哪份文件」「使用者圈選了什麼」放進問題本身。
+    # 放進 prompt 而不是偷偷塞進 system，是為了讓學生在軌跡上看得到 agent 收到什麼。
+    question = q
+    if scope:
+        head = f"【目前開啟】{scope}\n"
+        if selection.strip():
+            head += f"【使用者圈選】\n{selection.strip()[:2000]}\n"
+        question = head + "\n" + q
     queue: asyncio.Queue = asyncio.Queue()
 
     def emit(event: dict) -> None:
@@ -161,7 +227,7 @@ async def ask(q: str, arch: str = "modular") -> StreamingResponse:
                 "text": f"架構：{architecture.name}｜編排：{architecture.orchestration}｜"
                         f"模組：{', '.join(architecture.modules + architecture.builtin_tools)}",
             })
-            await RUN(q, INDEX, emit, architecture)
+            await RUN(question, INDEX, emit, architecture)
         except Exception as exc:  # noqa: BLE001 — 錯誤要送到前端，不能只寫在 log
             emit({"type": "error", "text": f"{type(exc).__name__}: {exc}", "fatal": True})
         finally:

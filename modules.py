@@ -56,14 +56,24 @@ def _hits_to_results(ix: Index, hits) -> list[dict]:
 # ── Retrieval 階段 ─────────────────────────────────────────
 
 
-def search(ix: Index, query: str, method: str = "hybrid", k: int = 5) -> dict:
-    """[Retrieval] 基本檢索。method 由模型自己選，這一行就是 Router。"""
+def search(ix: Index, query: str, method: str = "hybrid", k: int = 5, path: str = "") -> dict:
+    """[Retrieval] 基本檢索。method 由模型自己選，這一行就是 Router。
+
+    path 可選：只在某一份文件裡找。做「針對這份文件問答」時用，
+    避免答案混進其他文件的內容 —— 使用者面前開著 A 文件，你引用 B 文件會很怪。
+    """
     searchers = {"bm25": bm25_search, "vector": vector_search, "hybrid": hybrid_search}
     fn = searchers.get(method)
     if fn is None:
         return {"error": f"method 只能是 {list(searchers)}，收到 {method!r}"}
-    hits = fn(ix, query, k=k)
+    if path:
+        # 先多撈一些再過濾，才不會因為別的文件佔滿名額而回空的
+        hits = [h for h in fn(ix, query, k=k * 8) if get_chunk(ix, h.chunk_id).path == path][:k]
+    else:
+        hits = fn(ix, query, k=k)
     out = {"query": query, "method": method, "results": _hits_to_results(ix, hits)}
+    if path:
+        out["scoped_to"] = path
     if not out["results"]:
         out["hint"] = "一個詞都沒命中。換文件裡可能出現的術語，或改用 vector / hybrid。"
     if hits and hits[0].degraded:
@@ -264,6 +274,10 @@ MODULES: dict[str, dict[str, Any]] = {
                 "query": {"type": "string"},
                 "method": {"type": "string", "enum": ["bm25", "vector", "hybrid"]},
                 "k": {"type": "integer", "description": "預設 5"},
+                "path": {
+                    "type": "string",
+                    "description": "只在這一份文件裡找（例如 papers/crag.pdf）。留空就是全部語料。",
+                },
             },
             "required": ["query", "method"],
         },
@@ -780,6 +794,47 @@ PAPER_SLIDES = Architecture(
 )
 
 
+
+DOC_CHAT = Architecture(
+    name="文件問答（限定目前開啟的文件）",
+    paper="實用案例：使用者面前開著一份文件，就只談這份",
+    orchestration="Conditional（先看圈選、必要時才檢索）",
+    modules=["search", "expand", "grade_documents"],
+    policy="""使用者正在讀一份文件，你只回答**關於這份文件**的問題。
+
+每次訊息開頭會附上：
+
+```
+【目前開啟】<檔案路徑>
+【使用者圈選】<圈選的內容，可能沒有>
+```
+
+## 規則
+
+**一、search 一律帶 `path` 參數**，值就是「目前開啟」的那個路徑。
+不要去查別的文件 —— 使用者面前開著 A，你引用 B 會讓他找不到你在說什麼。
+
+**二、有圈選內容時，那就是問題的主體。**
+先直接針對圈選的那段回答。只有在「光看這段不夠」的時候才去 search 補上下文，
+並明講你為什麼需要補（例如：這段提到的縮寫在前面定義過）。
+
+**三、沒有圈選時**，就照一般流程：search（帶 path）→ 必要時 grade_documents 讀完整內文
+→ 片段被切斷用 expand 補 → 作答。
+
+**四、這份文件裡沒有的，就說沒有。** 不要用背景知識補，也不要去查其他文件。
+如果問題明顯超出這份文件的範圍，直接說「這個問題超出這份文件，要我改查整個知識庫嗎？」
+
+## 回答風格
+
+短。使用者是邊讀邊問，不是要一篇報告。
+- 圈選一段問「這是什麼意思」→ 三五句話講完
+- 問「這個實驗結論是什麼」→ 講結論 + 關鍵數字
+
+每個事實一樣要標出處 `[檔案#片段]`。PDF 的出處會帶頁碼，使用者點了就能翻過去對照。""",
+    max_turns=10,
+)
+
+
 ARCHITECTURES: dict[str, Architecture] = {
     # 基準線
     "naive": NAIVE,
@@ -801,8 +856,9 @@ ARCHITECTURES: dict[str, Architecture] = {
 
     # 全部給你自己組
     "modular": MODULAR_DIY,
-    # 實用案例：讀 PDF 產投影片重點
+    # 實用案例
     "paper_slides": PAPER_SLIDES,
+    "doc_chat": DOC_CHAT,
 }
 
 
