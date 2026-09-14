@@ -93,7 +93,8 @@
   .node.sel{border-color:var(--signal);box-shadow:0 0 0 1px var(--signal)}
   .node .n{font-family:var(--mono);font-size:.82rem}
   .node .s{font-size:.68rem;color:var(--muted);font-family:var(--mono)}
-  .node .d{font-size:.72rem;color:var(--muted);line-height:1.4;margin-top:.15rem}
+  .node .d{font-size:.72rem;color:var(--muted);line-height:1.4;margin-top:.15rem;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .node.ext .n{color:var(--ext)}
   .node.ext{border-style:dashed}
   .node.anchor{background:var(--panel-2);border-color:var(--signal);width:170px}
@@ -128,6 +129,60 @@
     text-align:center;color:var(--muted);font-size:.85rem;line-height:1.8;pointer-events:none;
   }
   .hint code{font-family:var(--mono);color:var(--ink)}
+
+  /* ── 供應商 / MCP 的抽屜 ── */
+  .sheet{
+    position:fixed;inset:0;z-index:60;background:rgba(10,14,24,.72);
+    display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;
+  }
+  .sheet .box{
+    width:min(680px,100%);max-height:92vh;overflow-y:auto;
+    background:var(--panel);border:1px solid var(--rail);border-radius:8px;padding:1.1rem 1.3rem;
+  }
+  .sheet h2{margin:0 0 .2rem;font-size:1rem}
+  .sheet .sub{color:var(--muted);font-size:.8rem;margin:0 0 .9rem;line-height:1.6}
+  .sheet .close{float:right;margin:-.3rem -.4rem 0 0}
+  .sheet fieldset{border:1px solid var(--rail);border-radius:6px;padding:.7rem .9rem;margin:0 0 .7rem}
+  .sheet legend{font-size:.82rem;padding:0 .35rem;color:var(--ink)}
+  .sheet legend.on{color:var(--signal)}
+  .sheet label.f{display:flex;align-items:center;gap:.5rem;margin:.3rem 0;font-size:.8rem;color:var(--muted)}
+  .sheet label.f span{flex:0 0 9rem}
+  .sheet label.f input{flex:1;min-width:0}
+  .sheet .note2{font-size:.76rem;color:var(--muted);line-height:1.6;margin:.1rem 0 .5rem}
+  .sheet .chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.4rem}
+  .sheet .chips button{padding:.1rem .55rem;font-size:.74rem;font-weight:400;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .sheet .chips button:hover{color:var(--signal);border-color:var(--signal)}
+
+  .srv{border:1px solid var(--rail);border-radius:6px;padding:.5rem .7rem;margin-bottom:.45rem}
+  .srv.bad{border-color:var(--alert)}
+  .srv .h{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .srv .h b{font-size:.88rem}
+  .srv .h .st{font-family:var(--mono);font-size:.7rem;color:var(--ok)}
+  .srv.bad .h .st{color:var(--alert)}
+  .srv .h .spacer{flex:1}
+  .srv .h button,.srv .h select{padding:.1rem .5rem;font-size:.72rem;font-weight:400;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .srv .tl{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:.25rem;line-height:1.7}
+  .srv .cfg{font-family:var(--mono);font-size:.68rem;color:var(--muted);opacity:.75;margin-top:.15rem;
+    word-break:break-all}
+
+  header .live{
+    font-family:var(--mono);font-size:.72rem;color:var(--muted);
+    border:1px solid var(--rail);border-radius:3px;padding:.12rem .5rem;cursor:pointer;
+  }
+  header .live:hover{border-color:var(--signal);color:var(--signal)}
+  header .live b{color:var(--signal);font-weight:600}
+
+  .pchip.mcp{color:var(--ok);border-color:rgba(111,211,168,.35)}
+  .pchip .src{float:right;font-size:.6rem;opacity:.8}
+  .node.mcp{border-color:rgba(111,211,168,.5);border-style:dashed}
+  .node.mcp .n{color:var(--ok)}
+  .palette .addsrv{
+    width:100%;padding:.3rem;font-size:.75rem;font-weight:400;margin-top:.2rem;
+    background:none;color:var(--muted);border:1px dashed var(--rail);border-radius:4px;
+  }
+  .palette .addsrv:hover{color:var(--signal);border-color:var(--signal)}
 
   /* ── 右欄 ── */
   .side{
@@ -166,6 +221,7 @@
   <h1>Agentic RAG Studio</h1>
   <span class="claim"><b>這張圖不會被執行。</b>被執行的是右邊那段 policy —— 圖只是幫你把它想清楚。</span>
   <span class="spacer"></span>
+  <span class="live" id="liveProvider" title="換一個 LLM 供應商">模型：<b>讀取中…</b></span>
   <label>從現有架構開始 <select id="sFrom"><option value="">（空白）</option></select></label>
   <button type="button" class="ghost" id="sClear">清空畫布</button>
   <a href="/" class="ghost" style="text-decoration:none;padding:.3rem .9rem;border:1px solid var(--rail);border-radius:4px;font-size:.85rem">回主畫面</a>
@@ -175,6 +231,7 @@
   <section class="palette">
     <h2>模組庫</h2>
     <div id="pal"></div>
+    <button type="button" class="addsrv" id="openMcp">＋ 接一個 MCP server</button>
     <p class="tip">
       拖到畫布上放一個模組。<br>
       從節點右邊的圓點拉到另一個節點，畫一條連線。<br>
@@ -222,6 +279,64 @@
   </section>
 </main>
 
+<div class="sheet hidden" id="provSheet">
+  <div class="box">
+    <button type="button" class="ghost close" data-close="provSheet">關閉</button>
+    <h2>LLM 供應商</h2>
+    <p class="sub">SDK 是去 spawn <code>claude</code> 這支 CLI，所以「用哪個模型」是<strong>環境變數</strong>的事，不是程式碼的事。
+      換供應商<strong>不用重開服務，也不用改任何一個模組或 policy</strong> ——
+      下面填的 token 只留在記憶體，不會寫進 .env。</p>
+    <div id="provForms"></div>
+    <div class="row">
+      <button type="button" id="provTest" class="ghost">試連看看</button>
+      <button type="button" id="provReset" class="ghost">還原成預設（OAuth 訂閱）</button>
+      <span class="msg" id="provMsg"></span>
+    </div>
+  </div>
+</div>
+
+<div class="sheet hidden" id="mcpSheet">
+  <div class="box">
+    <button type="button" class="ghost close" data-close="mcpSheet">關閉</button>
+    <h2>外部 MCP server</h2>
+    <p class="sub">我們自己那七個模組，本來就是包成一個叫 <code>ragmod</code> 的 MCP server 餵給 SDK 的。
+      所以接一個別人的 MCP server，跟自己寫一個模組，<strong>對編排來說是同一件事</strong> ——
+      <code>mcp__ragmod__search</code> 和 <code>mcp__context7__query-docs</code>
+      在 policy 裡都只是一個名字。</p>
+
+    <fieldset>
+      <legend>已接上的</legend>
+      <div id="mcpList"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>從你的 Claude Code 直接搬過來</legend>
+      <p class="note2">讀 <code>~/.claude.json</code> 裡已經裝好的 server，按一下就接。只在你自己這台機器上顯示。</p>
+      <div id="mcpImport"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>自己加一個</legend>
+      <label class="f"><span>名字</span><input id="mcpName" placeholder="context7"></label>
+      <label class="f"><span>種類</span>
+        <select id="mcpKind"><option value="http">http</option><option value="sse">sse</option><option value="stdio">stdio（本機指令）</option></select>
+      </label>
+      <label class="f" id="mcpUrlRow"><span>URL</span><input id="mcpUrl" placeholder="https://mcp.context7.com/mcp"></label>
+      <label class="f hidden" id="mcpCmdRow"><span>指令</span><input id="mcpCmd" placeholder="npx"></label>
+      <label class="f hidden" id="mcpArgsRow"><span>參數（空白分隔）</span><input id="mcpArgs" placeholder="-y @modelcontextprotocol/server-filesystem /tmp"></label>
+      <label class="f"><span>放在哪個階段</span>
+        <select id="mcpStage"><option>Indexing</option><option>Pre-retrieval</option><option selected>Retrieval</option><option>Post-retrieval</option></select>
+      </label>
+      <p class="note2">階段只影響它畫在流程圖的哪一欄。選錯不會壞，但學生會看不懂它在流程的哪個位置。</p>
+      <div class="row">
+        <button type="button" id="mcpTest" class="ghost">試連看看</button>
+        <button type="button" id="mcpAdd">連上並加入</button>
+        <span class="msg" id="mcpMsg"></span>
+      </div>
+    </fieldset>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g,
@@ -245,7 +360,9 @@ Promise.all([
   STAGES = stages;
   ARCHS = archs;
   stages.forEach(st => st.modules.forEach(m => {
-    META[m.name] = { stage: st.stage, description: m.description, builtin: !!m.builtin };
+    META[m.name] = { stage: st.stage, description: m.description,
+                     builtin: !!m.builtin, mcp: !!m.mcp, short: m.short || m.name,
+                     server: m.server || '' };
   }));
   buildPalette();
   $('sFrom').innerHTML = '<option value="">（空白）</option>' +
@@ -257,8 +374,10 @@ function buildPalette() {
   $('pal').innerHTML = STAGES.map(st =>
     '<div class="grp"><span class="lbl">' + esc(st.stage) + '</span>' +
     st.modules.map(m =>
-      '<span class="pchip' + (m.builtin ? ' ext' : '') + '" draggable="true" data-name="' +
-      esc(m.name) + '">' + esc(m.name) +
+      '<span class="pchip' + (m.mcp ? ' mcp' : (m.builtin ? ' ext' : '')) +
+      '" draggable="true" data-name="' + esc(m.name) + '">' +
+      '<span class="src">' + (m.mcp ? 'MCP' : (m.builtin ? 'SDK' : '')) + '</span>' +
+      esc(m.short || m.name) +
       '<span class="d">' + esc(m.description) + '</span></span>').join('') +
     '</div>').join('');
   $('pal').querySelectorAll('.pchip').forEach(c => {
@@ -308,7 +427,8 @@ const nodeW = n => (n.name === START || n.name === ANSWER) ? ANCHOR_W : NODE_W;
 function label(n) {
   if (n.name === START) return '問題進來';
   if (n.name === ANSWER) return '產生答案';
-  return n.name;
+  // MCP 工具的完整名字 mcp__server__tool 塞不進節點，畫面顯示短名，存檔用完整名
+  return (META[n.name] && META[n.name].short) || n.name;
 }
 
 function stageIndex(n) {
@@ -328,7 +448,8 @@ function render() {
     const m = META[n.name] || {};
     const anchor = n.name === START || n.name === ANSWER;
     const d = document.createElement('div');
-    d.className = 'node' + (anchor ? ' anchor' : '') + (m.builtin ? ' ext' : '') +
+    d.className = 'node' + (anchor ? ' anchor' : '') +
+                  (m.mcp ? ' mcp' : (m.builtin ? ' ext' : '')) +
                   (G.sel === n.id ? ' sel' : '');
     d.style.left = n.x + 'px';
     d.style.top = n.y + 'px';
@@ -336,7 +457,7 @@ function render() {
     d.innerHTML =
       '<div class="n">' + esc(label(n)) + '</div>' +
       (anchor ? '' :
-        '<div class="s">' + esc(m.stage || '') + '</div>' +
+        '<div class="s">' + esc(m.stage || '') + (m.mcp ? '　MCP · ' + esc(m.server) : '') + '</div>' +
         '<div class="d">' + esc(m.description || '') + '</div>') +
       (anchor ? '' : '<span class="x" title="刪掉">✕</span>') +
       (n.name === ANSWER ? '' : '<span class="port out"></span>') +
@@ -549,7 +670,9 @@ function compile() {
 
   order.forEach(id => {
     const n = nodeById(id);
-    out.push(`<b>第 ${num[id]} 步：呼叫 ${n.name}</b>　${META[n.name].description}`);
+    const m = META[n.name];
+    out.push(`<b>第 ${num[id]} 步：呼叫 ${n.name}</b>` +
+             (m.mcp ? '　<span class="warn">（外部 MCP）</span>' : '') + `　${m.description}`);
     const outs = outsOf(id);
     if (!outs.length) {
       out.push('　 └ 這一步之後沒有連線 —— agent 做完不知道要幹嘛。');
@@ -590,6 +713,219 @@ function compiledPlain() {
   return $('sCompiled').textContent.trim();
 }
 
+/* ══════════ LLM 供應商 ══════════ */
+
+/* SDK 是去 spawn claude CLI，所以換模型是環境變數的事。
+   env 每次 spawn 才疊上去 —— 換供應商不用重開服務，模組和 policy 一個字都不用改。 */
+
+let PROV = { presets: [], active: null };
+
+function loadProviders() {
+  return fetch('/api/providers').then(r => r.json()).then(d => {
+    PROV = d;
+    $('liveProvider').innerHTML = '模型：<b>' + esc(d.active.name) + '</b>';
+    $('liveProvider').title = '來源：' + d.active.source + '（點一下換）';
+    return d;
+  });
+}
+loadProviders();
+
+$('liveProvider').onclick = () => { renderProviders(); openSheet('provSheet'); };
+
+function renderProviders() {
+  $('provForms').innerHTML = PROV.presets.map(p => {
+    const on = PROV.active.key === p.key;
+    return '<fieldset><legend class="' + (on ? 'on' : '') + '">' + esc(p.name) +
+        (on ? '　← 現在用這個' : '') + '</legend>' +
+      '<p class="note2">' + esc(p.note) + '</p>' +
+      (p.shortcuts ? '<div class="chips">' + p.shortcuts.map((sc, i) =>
+        '<button type="button" data-p="' + esc(p.key) + '" data-sc="' + i + '">' +
+        esc(sc.name) + '</button>').join('') + '</div>' : '') +
+      p.fields.map(f =>
+        '<label class="f"><span>' + esc(f.label) + '</span>' +
+        '<input id="pf-' + esc(p.key) + '-' + esc(f.env) + '"' +
+        (f.secret ? ' type="password"' : '') +
+        ' placeholder="' + esc(f.placeholder || '') + '"' +
+        ' value="' + esc((on && !f.secret && PROV.active.values[f.env]) || '') + '"></label>').join('') +
+      '<div class="row"><button type="button" data-use="' + esc(p.key) + '">' +
+        (p.fields.length ? '接上去' : '用這個') + '</button></div>' +
+    '</fieldset>';
+  }).join('');
+
+  $('provForms').querySelectorAll('[data-sc]').forEach(b => {
+    b.onclick = () => {
+      const sc = PROV.presets.find(x => x.key === b.dataset.p).shortcuts[+b.dataset.sc];
+      for (const k in sc.values) {
+        const el = $('pf-' + b.dataset.p + '-' + k);
+        if (el) el.value = sc.values[k];
+      }
+    };
+  });
+
+  $('provForms').querySelectorAll('[data-use]').forEach(b => {
+    b.onclick = () => {
+      const key = b.dataset.use;
+      const p = PROV.presets.find(x => x.key === key);
+      const values = {};
+      p.fields.forEach(f => { values[f.env] = ($('pf-' + key + '-' + f.env) || {}).value || ''; });
+      b.disabled = true;
+      provSay('切換中…');
+      fetch('/api/providers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, values }),
+      })
+        .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+        .then(() => loadProviders())
+        .then(() => { renderProviders(); provSay('換好了。下一題就會走這個供應商 —— 不用重開。', 'good'); })
+        .catch(err => provSay('失敗：' + err, 'bad'))
+        .finally(() => { b.disabled = false; });
+    };
+  });
+}
+
+function provSay(t, k) { $('provMsg').textContent = t; $('provMsg').className = 'msg' + (k ? ' ' + k : ''); }
+
+/* base URL 打錯的話 CLI 不會報錯，它會安靜地一直重試 ——
+   問答那邊就只是轉圈圈，學生會以為是自己的 policy 壞了。所以先給一顆試連按鈕。 */
+$('provTest').onclick = () => {
+  $('provTest').disabled = true;
+  provSay('發一句「回答 OK」試試…（最多 60 秒）');
+  fetch('/api/providers/test', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => provSay(d.ok ? '通了，它回：' + d.text : d.error, d.ok ? 'good' : 'bad'))
+    .catch(err => provSay('失敗：' + err, 'bad'))
+    .finally(() => { $('provTest').disabled = false; });
+};
+
+$('provReset').onclick = () => fetch('/api/providers', { method: 'DELETE' })
+  .then(() => loadProviders()).then(() => { renderProviders(); provSay('還原了', 'good'); });
+
+/* ══════════ 外部 MCP server ══════════ */
+
+/* 我們自己的模組本來就是包成一個叫 ragmod 的 MCP server 餵給 SDK 的。
+   所以接別人的 server 不是「外掛」，它就是模組 —— 只是程式碼不在這個 repo。 */
+
+function openSheet(id) { $(id).classList.remove('hidden'); }
+document.querySelectorAll('[data-close]').forEach(b => {
+  b.onclick = () => $(b.dataset.close).classList.add('hidden');
+});
+document.querySelectorAll('.sheet').forEach(sh => {
+  sh.onclick = e => { if (e.target === sh) sh.classList.add('hidden'); };
+});
+
+$('openMcp').onclick = () => { loadMcp(); openSheet('mcpSheet'); };
+
+$('mcpKind').onchange = () => {
+  const stdio = $('mcpKind').value === 'stdio';
+  $('mcpUrlRow').classList.toggle('hidden', stdio);
+  $('mcpCmdRow').classList.toggle('hidden', !stdio);
+  $('mcpArgsRow').classList.toggle('hidden', !stdio);
+};
+
+function mcpConfig() {
+  const kind = $('mcpKind').value;
+  if (kind === 'stdio') {
+    const args = $('mcpArgs').value.trim();
+    return { command: $('mcpCmd').value.trim(), args: args ? args.split(/\s+/) : [] };
+  }
+  return { type: kind, url: $('mcpUrl').value.trim() };
+}
+
+function mcpSay(t, k) { $('mcpMsg').textContent = t; $('mcpMsg').className = 'msg' + (k ? ' ' + k : ''); }
+
+function loadMcp() {
+  return fetch('/api/mcp').then(r => r.json()).then(d => {
+    $('mcpList').innerHTML = d.servers.length ? '' :
+      '<p class="note2">還沒接任何外部 server。下面可以從你的 Claude Code 直接搬一個過來。</p>';
+    d.servers.forEach(srv => {
+      const el = document.createElement('div');
+      el.className = 'srv' + (srv.status === 'connected' ? '' : ' bad');
+      el.innerHTML =
+        '<div class="h"><b>' + esc(srv.name) + '</b>' +
+        '<span class="st">' + esc(srv.status) + '</span>' +
+        (srv.info.version ? '<span class="st" style="color:var(--muted)">v' + esc(srv.info.version) + '</span>' : '') +
+        '<span class="spacer"></span>' +
+        '<select class="stage">' + ['Indexing', 'Pre-retrieval', 'Retrieval', 'Post-retrieval']
+          .map(x => '<option' + (x === srv.stage ? ' selected' : '') + '>' + x + '</option>').join('') +
+        '</select><button type="button" class="del">移除</button></div>' +
+        '<div class="tl">' + (srv.tools.map(t => 'mcp__' + srv.name + '__' + t).map(esc).join('　') ||
+          esc(srv.error || '沒有工具')) + '</div>' +
+        '<div class="cfg">' + esc(JSON.stringify(srv.config)) + '</div>';
+      el.querySelector('.stage').onchange = e => fetch('/api/mcp/' + encodeURIComponent(srv.name) + '/stage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: e.target.value }),
+      }).then(() => refreshPalette());
+      el.querySelector('.del').onclick = () => fetch('/api/mcp/' + encodeURIComponent(srv.name), {
+        method: 'DELETE' }).then(() => { loadMcp(); refreshPalette(); });
+      $('mcpList').appendChild(el);
+    });
+
+    $('mcpImport').innerHTML = d.importable.length ? '' :
+      '<p class="note2">你的 ~/.claude.json 裡沒有 MCP server，或讀不到。</p>';
+    d.importable.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'srv';
+      el.innerHTML = '<div class="h"><b>' + esc(item.name) + '</b>' +
+        '<span class="st" style="color:var(--muted)">' + esc(item.kind) + '</span>' +
+        '<span class="spacer"></span>' +
+        '<button type="button" class="imp">' + (item.already ? '已接上' : '接過來') + '</button></div>' +
+        '<div class="cfg">' + esc(JSON.stringify(item.safe)) + '</div>';
+      const b = el.querySelector('.imp');
+      b.disabled = item.already;
+      b.onclick = () => {
+        b.disabled = true; b.textContent = '連線中…';
+        addServer(item.name, item.config, 'Retrieval')
+          .catch(() => { b.disabled = false; b.textContent = '接過來'; });
+      };
+      $('mcpImport').appendChild(el);
+    });
+  });
+}
+
+function addServer(name, config, stage) {
+  return fetch('/api/mcp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, config, stage }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+    .then(() => { mcpSay('接上了：' + name, 'good'); return Promise.all([loadMcp(), refreshPalette()]); })
+    .catch(err => { mcpSay('失敗：' + err, 'bad'); throw err; });
+}
+
+$('mcpTest').onclick = () => {
+  mcpSay('連線中…（最多 25 秒）');
+  fetch('/api/mcp/probe', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config: mcpConfig() }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+    .then(d => mcpSay(d.status === 'connected'
+      ? '連上了：' + (d.info.name || '') + ' 有 ' + d.tools.length + ' 個工具 —— ' + d.tools.join('、')
+      : '沒連上：' + (d.error || d.status), d.status === 'connected' ? 'good' : 'bad'))
+    .catch(err => mcpSay('失敗：' + err, 'bad'));
+};
+
+$('mcpAdd').onclick = () => {
+  const name = $('mcpName').value.trim();
+  if (!name) return mcpSay('先給它一個名字', 'bad');
+  mcpSay('連線中…（最多 25 秒）');
+  addServer(name, mcpConfig(), $('mcpStage').value).catch(() => {});
+};
+
+/** 接了新 server 之後 palette 要重畫，但畫布上已經放的節點不能弄丟 */
+function refreshPalette() {
+  return fetch('/api/pipeline').then(r => r.json()).then(stages => {
+    STAGES = stages;
+    stages.forEach(st => st.modules.forEach(m => {
+      META[m.name] = { stage: st.stage, description: m.description,
+                       builtin: !!m.builtin, mcp: !!m.mcp, short: m.short || m.name,
+                       server: m.server || '' };
+    }));
+    buildPalette();
+    render();
+  });
+}
+
 /* ══════════ 載入 / 存檔 ══════════ */
 
 $('sFrom').onchange = () => {
@@ -612,7 +948,8 @@ $('sFrom').onchange = () => {
   // 沒畫過圖的架構：依階段排一排，但**不要幫它連線** ——
   // 它的流程寫在 policy 裡，猜出來的連線會是假的。
   reset();
-  const mods = (a.modules || []).concat(a.builtin_tools || []).filter(m => META[m]);
+  const mods = (a.modules || []).concat(a.builtin_tools || [], a.mcp_tools || [])
+                 .filter(m => META[m]);
   const col = {};
   mods.forEach(m => {
     const c = STAGES.findIndex(s => s.stage === META[m].stage);
@@ -631,13 +968,13 @@ function say(text, kind) {
 }
 
 function spec() {
-  const mods = G.nodes.filter(n => META[n.name] && !META[n.name].builtin).map(n => n.name);
-  const builtin = G.nodes.filter(n => META[n.name] && META[n.name].builtin).map(n => n.name);
+  const pick = f => [...new Set(G.nodes.filter(n => META[n.name] && f(META[n.name])).map(n => n.name))];
   return {
     name: $('sName').value.trim(),
     orchestration: $('sOrch').value.trim() || 'Linear',
-    modules: [...new Set(mods)],
-    builtin_tools: [...new Set(builtin)],
+    modules: pick(m => !m.builtin && !m.mcp),
+    builtin_tools: pick(m => m.builtin && !m.mcp),
+    mcp_tools: pick(m => m.mcp),
     max_turns: parseInt($('sTurns').value, 10) || 12,
     policy: $('sPolicy').value.trim(),
     why: '在 Studio 畫布上組出來的',
@@ -653,7 +990,7 @@ $('sWrite').onclick = () => {
   fetch('/api/architect/policy', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      modules: s.modules, builtin_tools: s.builtin_tools,
+      modules: s.modules, builtin_tools: s.builtin_tools, mcp_tools: s.mcp_tools,
       note: '使用者在畫布上畫了這個流程，policy 要照著它寫：\n\n' + compiledPlain(),
     }),
   })

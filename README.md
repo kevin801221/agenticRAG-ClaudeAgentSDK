@@ -194,6 +194,82 @@ uv run uvicorn app:app --reload
 > 這是 Adaptive-RAG 的「選型」升一層：Adaptive 替**一個問題**選路線，
 > 架構師替**一個使用情境**選架構。而且建議完可以馬上並排驗證 —— 建議與驗證在同一個畫面。
 
+### 模組有三種來源，對編排來說都一樣
+
+這是整套主張的最後一塊。我們自己那七個模組，本來就是用 `create_sdk_mcp_server`
+包成一個叫 `ragmod` 的 **MCP server** 餵給 SDK 的。所以：
+
+```
+mcp__ragmod__search             ← 我們自己寫的 @tool
+WebSearch                       ← SDK 內建，Anthropic 那端執行
+mcp__context7__query-docs       ← 別人的 MCP server
+```
+
+**在 policy 裡它們都只是一個名字。** 模組住在哪裡、誰寫的、跑在哪台機器上，
+對編排完全沒有差別 —— 這就是 Modular RAG 說的「模組」。
+
+Studio 的模組庫把三種並排，各自標 SDK / MCP：
+
+| 來源 | 看得到原始碼嗎 | 誰執行 |
+|---|---|---|
+| 本地 `@tool` | 看得到（軌跡卡片可以展開） | 你的機器 |
+| SDK 內建 | 看不到 | Anthropic |
+| 外部 MCP | 看不到，只知道介面 | 那個 server |
+
+#### 接一個 MCP server
+
+Studio 左下「＋ 接一個 MCP server」：
+
+- **從你的 Claude Code 直接搬過來** —— 讀 `~/.claude.json` 已經裝好的 server，按一下就接
+- 或自己填 http / sse / stdio
+- 「試連看看」會真的連上去把工具清單抓回來。**連不上就不給存** ——
+  存一個死的 server，學生只會以為是自己弄壞的
+- 選它屬於哪個階段（只影響畫在流程圖的哪一欄）
+
+只有架構**真的用到**的 server 會被掛上去。掛了沒用到的有兩個代價：
+連線成本，以及偷偷擴大授權。
+
+實測跑出來的軌跡（架構：本地查不到才走外部）：
+
+```
+[1] search  {"query": "FastAPI BackgroundTasks", "method": "bm25"}   -> 0 筆
+[2] search  {"query": "FastAPI 背景任務 非同步執行", "method": "hybrid"} -> 5 筆
+[3] grade_documents                                                  -> 取回 3 塊，全 0 分
+[4] mcp__context7__resolve-library-id  {"libraryName": "FastAPI"}    -> /websites/fastapi_tiangolo
+[5] mcp__context7__query-docs                                        -> 官方文件
+```
+
+答案開頭自己講了：「**這題不在本地知識庫裡**（知識庫只有 Claude Code 教材，
+FastAPI 相關片段評分全為 0），以下內容來自 Context7 抓到的 FastAPI 官方文件。」
+出處標成 `[mcp: mcp__context7__query-docs]`，跟知識庫的 `[檔名#編號]` **分開標** ——
+使用者要看得出哪一句有本地片段撐腰、哪一句是外面來的。這條規則寫在 system prompt 裡，
+只要架構有 `mcp_tools` 就會自動加上去。
+
+### 換 LLM 供應商：點一下，不用重開
+
+SDK 是去 spawn `claude` 這支 CLI，所以「用哪個模型」不是程式碼的事，是**環境變數**的事。
+`ClaudeAgentOptions.env` 是每次 spawn 才疊上去的 —— 所以可以**每一次呼叫都換一個供應商**。
+
+Studio 頂上那個「模型：…」點下去：
+
+| 選項 | 要填什麼 |
+|---|---|
+| OAuth 訂閱（預設） | 什麼都不用填，走你的 Claude 訂閱額度 |
+| Anthropic API Key | key |
+| Anthropic 相容端點 | base URL + token + 模型。**DeepSeek / Kimi / GLM / LiteLLM 各有一鍵帶入** |
+| AWS Bedrock | region（認證用機器上原本的 AWS 憑證鏈） |
+| Google Vertex AI | region + GCP 專案 ID |
+
+**換供應商不用改任何一個模組、一行 policy、一個字的架構定義。** 這是課堂上最常被問的
+「那我公司不能用 Anthropic 怎麼辦」的答案。
+
+填的 token **只留在記憶體**，不寫進 `.env`，重開就沒了 ——
+教室裡輪流用同一台機器示範，沒有人的 key 會留在硬碟上。
+
+> **「試連看看」一定要按。** base URL 打錯的話 CLI 不會報錯，它會安靜地一直重試，
+> 問答那邊就只是轉圈圈 —— 學生會以為是自己的 policy 寫壞了。
+> 這顆按鈕會發一句「回答 OK」，60 秒沒回應就明講是 base URL 或 token 的問題。
+
 ### 左邊的抽屜：滑過去打開，移開縮回去
 
 筆記本、語料庫、架構圖書館本來擺在頁尾，一展開就把整頁推下去 ——
@@ -481,6 +557,8 @@ retrieval.py         BM25(jieba) + 向量(e5-small/MPS) + RRF + 可插拔向量 
 index_corpus.py      切塊建索引（markdown 按 heading、PDF 按頁）
 ingest.py         ⭐ 上傳文件 → agent 決定怎麼切、要不要補脈絡 → 併進語料庫
 architect.py         架構師：聊幾輪吐出 Architecture JSON；也負責替組裝台寫 policy
+providers.py         LLM 供應商：OAuth / API key / 相容端點 / Bedrock / Vertex，記憶體切換
+mcp_registry.py      外部 MCP server：探測、登記、一鍵從 Claude Code 匯入
 traces.py            軌跡錄影與重播（不呼叫 LLM）
 corpus/              範例語料：Claude Code 參考文件（.md）+ papers/（.pdf，用腳本抓）
 scripts/             fetch_papers.sh —— 從 arXiv 抓論文
@@ -491,7 +569,7 @@ engines/
 app.py               FastAPI + SSE
 static/index.html    單檔前端，無建置
 static/studio.html   畫布版組裝台（/studio），也是單檔
-tests/               測試（27 項：檢索層 + 架構層）
+tests/               測試（30 項：檢索層 + 架構層）
 ```
 
 `app.py` 和 notebook 用的是**同一份** `modules.py` —— 網頁就是 notebook 02 的其中一格加了畫面。

@@ -223,6 +223,13 @@ def validate(spec: dict) -> tuple[bool, str]:
     bad = [b for b in (spec.get("builtin_tools") or []) if b not in BUILTIN_TOOLS]
     if bad:
         return False, f"用了未登記的內建工具：{bad}"
+    # MCP 工具要真的連得上才准存 —— 存一個連不上的架構，學生會以為是自己弄壞的
+    import mcp_registry
+
+    live = {t["name"] for t in mcp_registry.all_tools()}
+    ghost = [t for t in (spec.get("mcp_tools") or []) if t not in live]
+    if ghost:
+        return False, f"這些 MCP 工具現在連不上：{ghost}"
     return True, ""
 
 
@@ -234,6 +241,7 @@ def to_architecture(spec: dict) -> Architecture:
         modules=list(spec["modules"]),
         policy=spec["policy"].strip(),
         builtin_tools=list(spec.get("builtin_tools") or []),
+        mcp_tools=list(spec.get("mcp_tools") or []),
         max_turns=int(spec.get("max_turns") or 12),
     )
 

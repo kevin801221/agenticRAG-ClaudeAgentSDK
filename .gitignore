@@ -19,3 +19,4 @@ architectures/
 
 # 軌跡是跑出來的紀錄，預設不進 repo（要當教材就手動加想留的那幾份）
 traces/
+mcp.json

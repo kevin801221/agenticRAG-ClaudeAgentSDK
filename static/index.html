@@ -846,13 +846,14 @@ function buildPipe(stages) {
 
     st.modules.forEach((m, r) => {
       const nx = x + 18, ny = TOP + r * (NH + NGAP), nw = colW - 36;
-      const g = add('g', { class: 'node' + (m.builtin ? ' builtin' : ''), id: 'n-' + m.name });
+      const g = add('g', { class: 'node' + (m.builtin || m.mcp ? ' builtin' : ''), id: 'n-' + m.name });
       add('rect', { class: 'nhalo', x: nx - 3, y: ny - 3, width: nw + 6, height: NH + 6, rx: 7 }, g);
       add('rect', { class: 'nbox', x: nx, y: ny, width: nw, height: NH, rx: 6 }, g);
-      add('text', { class: 'nlabel', x: nx + 11, y: ny + 17 }, g).textContent = m.name;
+      add('text', { class: 'nlabel', x: nx + 11, y: ny + 17 }, g).textContent = m.short || m.name;
       const sub = add('text', { class: 'nsub', x: nx + 11, y: ny + 31 }, g);
       sub.textContent = (m.description || '').slice(0, Math.floor(nw / 12));
-      if (m.builtin) add('text', { class: 'ntag', x: nx + nw - 30, y: ny + 35 }, g).textContent = 'SDK';
+      if (m.builtin || m.mcp)
+        add('text', { class: 'ntag', x: nx + nw - 30, y: ny + 35 }, g).textContent = m.mcp ? 'MCP' : 'SDK';
       add('circle', { class: 'ncountbg', cx: nx + nw - 15, cy: ny + 15, r: 9 }, g);
       const cnt = add('text', { class: 'ncount', x: nx + nw - 15, y: ny + 18.5, 'text-anchor': 'middle' }, g);
       NODES[m.name] = { g: g, cnt: cnt, runs: 0, col: c, name: m.name,
@@ -880,7 +881,7 @@ function buildPipe(stages) {
 
 function paintArchitecture(arch) {
   const allowed = {};
-  (arch ? arch.modules.concat(arch.builtin_tools || []) : []).concat(['answer'])
+  (arch ? arch.modules.concat(arch.builtin_tools || [], arch.mcp_tools || []) : []).concat(['answer'])
     .forEach(m => { allowed[m] = 1; });
   for (const name in NODES) NODES[name].g.classList.toggle('off', !allowed[name]);
 }
@@ -909,7 +910,7 @@ function pipeMeta(text, live) {
 function archLabel() {
   const a = ARCHS.filter(x => x.key === $('arch').value)[0];
   if (!a) return '';
-  const n = a.modules.length + (a.builtin_tools || []).length;
+  const n = a.modules.length + (a.builtin_tools || []).length + (a.mcp_tools || []).length;
   return `${a.name} · ${n} 個模組`;
 }
 
@@ -1038,7 +1039,9 @@ Promise.all([
   $('patterns').innerHTML = ARCHS.map(a =>
     '<div class="pat"><h3>' + esc(a.name) + '</h3>' +
     '<p>' + esc(a.orchestration) + ' · ' + esc(a.paper) + '</p>' +
-    '<div class="where">' + a.modules.map(esc).join(' · ') + '</div></div>').join('');
+    '<div class="where">' +
+      a.modules.concat(a.builtin_tools || [], a.mcp_tools || []).map(esc).join(' · ') +
+    '</div></div>').join('');
 });
 
 function showArch() {
@@ -1048,7 +1051,7 @@ function showArch() {
   if (!pipeIsOpen()) pipeMeta(archLabel());
   $('archinfo').innerHTML =
     esc(a.orchestration) + '　模組：<code>' +
-    a.modules.concat(a.builtin_tools || []).map(esc).join('</code> <code>') + '</code>';
+    a.modules.concat(a.builtin_tools || [], a.mcp_tools || []).map(esc).join('</code> <code>') + '</code>';
 }
 
 /* ══════════ 問答 ══════════ */
@@ -1320,7 +1323,7 @@ function cmpPrepare(keys) {
   grid.style.gridTemplateColumns = 'repeat(' + keys.length + ', minmax(0, 1fr))';
   grid.innerHTML = keys.map(k => {
     const a = ARCHS.filter(x => x.key === k)[0] || { name: k, orchestration: '', modules: [] };
-    const mods = a.modules.concat(a.builtin_tools || []);
+    const mods = a.modules.concat(a.builtin_tools || [], a.mcp_tools || []);
     return '<div class="cmpcol" id="cmp-' + k + '">' +
       '<h3>' + esc(a.name) + '<span class="orch">' + esc(a.orchestration) + '</span></h3>' +
       '<div class="mods">' + mods.map(esc).join(' · ') + '</div>' +

@@ -21,6 +21,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 load_dotenv()
 
 import architect  # noqa: E402
+import mcp_registry  # noqa: E402
+import providers  # noqa: E402
 import traces  # noqa: E402
 from engines import check_config, describe_engine, get_engine  # noqa: E402
 from modules import ARCHITECTURES, BUILTIN_TOOLS, MODULES, STAGE_ORDER  # noqa: E402
@@ -105,6 +107,77 @@ async def pdf(path: str) -> FileResponse:
     return FileResponse(_corpus_pdf(path), media_type="application/pdf")
 
 
+# ══════════ LLM 供應商：換模型不用改程式碼 ══════════
+
+
+@app.get("/api/providers")
+async def providers_list() -> dict:
+    return {"presets": providers.PRESETS, "active": providers.status()}
+
+
+@app.post("/api/providers")
+async def providers_use(body: dict = Body(...)) -> dict:
+    try:
+        return providers.use(str(body.get("key") or ""), body.get("values") or {})
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/providers/test")
+async def providers_test() -> dict:
+    """發一次最小請求確認真的通。打錯 base URL 的話 CLI 只會安靜重試，不先試會找很久。"""
+    return await providers.test()
+
+
+@app.delete("/api/providers")
+async def providers_reset() -> dict:
+    return providers.reset()
+
+
+# ══════════ 外部 MCP server：別人寫的工具也是模組 ══════════
+
+
+@app.get("/api/mcp")
+async def mcp_list() -> dict:
+    return {"servers": mcp_registry.listing(), "importable": mcp_registry.importable()}
+
+
+@app.post("/api/mcp/probe")
+async def mcp_probe(body: dict = Body(...)) -> dict:
+    """先試連再決定要不要存。連不上的錯誤原樣回去，那是最常卡住的地方。"""
+    cfg = body.get("config")
+    if not isinstance(cfg, dict) or not (cfg.get("command") or cfg.get("url")):
+        raise HTTPException(400, "設定要有 command（stdio）或 url（http/sse）")
+    return await mcp_registry.probe(cfg)
+
+
+@app.post("/api/mcp")
+async def mcp_add(body: dict = Body(...)) -> dict:
+    cfg = body.get("config")
+    if not isinstance(cfg, dict) or not (cfg.get("command") or cfg.get("url")):
+        raise HTTPException(400, "設定要有 command（stdio）或 url（http/sse）")
+    try:
+        servers = await mcp_registry.add(str(body.get("name") or ""), cfg,
+                                         str(body.get("stage") or "Retrieval"))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"servers": servers}
+
+
+@app.post("/api/mcp/{name}/stage")
+async def mcp_stage(name: str, body: dict = Body(...)) -> dict:
+    if not mcp_registry.set_stage(name, str(body.get("stage") or "Retrieval")):
+        raise HTTPException(404, f"沒有這個 server：{name}")
+    return {"servers": mcp_registry.listing()}
+
+
+@app.delete("/api/mcp/{name}")
+async def mcp_delete(name: str) -> dict:
+    if not mcp_registry.remove(name):
+        raise HTTPException(404, f"沒有這個 server：{name}")
+    return {"servers": mcp_registry.listing()}
+
+
 @app.get("/api/pipeline")
 async def pipeline() -> list[dict]:
     """模組依 Modular RAG 階段分組。前端拿它畫流程圖的骨架。
@@ -122,6 +195,14 @@ async def pipeline() -> list[dict]:
         grouped[mod["stage"]].append(
             {"name": name, "description": mod["description"].split("。")[0] + "。", "builtin": True}
         )
+    # 外部 MCP server 的工具是第三種來源。三種在圖上並排，主張才立得住：
+    # 模組住在哪裡不重要，它只是 allowed_tools 裡的一個名字。
+    for t in mcp_registry.all_tools():
+        if t["stage"] in grouped:
+            grouped[t["stage"]].append(
+                {"name": t["name"], "short": t["short"], "server": t["server"],
+                 "description": t["description"], "builtin": False, "mcp": True}
+            )
     return [{"stage": s, "modules": grouped[s]} for s in STAGE_ORDER]
 
 
@@ -205,6 +286,7 @@ async def architectures() -> list[dict]:
             "orchestration": a.orchestration,
             "modules": a.modules,
             "builtin_tools": a.builtin_tools,
+            "mcp_tools": a.mcp_tools,
             "policy": a.policy.strip(),
             "custom": key.startswith("custom_"),
             # 畫布的節點座標。只有在 studio 上組出來的架構才有；沒有的話前端自己排版

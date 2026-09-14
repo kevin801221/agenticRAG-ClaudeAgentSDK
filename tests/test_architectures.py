@@ -84,3 +84,33 @@ def test_every_module_has_a_stage_and_description():
     for name, mod in {**M.MODULES, **M.BUILTIN_TOOLS}.items():
         assert mod.get("stage") in M.STAGE_ORDER, f"{name} 的 stage 不對：{mod.get('stage')}"
         assert mod.get("description", "").strip(), f"{name} 沒有描述"
+
+
+def test_mcp_tools_reach_allowed_tools_and_only_their_servers(ix):
+    """外部 MCP 工具要進 allowed_tools，而且只有**被用到**的 server 會被掛上去。
+
+    掛了沒用到的 server 有兩個代價：連線成本（stdio 要開行程），
+    以及偷偷擴大授權 —— agent 看得到一堆這個架構沒打算給它的工具。
+    """
+    arch = M.Architecture(
+        name="接 MCP 的架構", paper="測試", orchestration="Conditional",
+        modules=["search"], policy="查不到就問外部。" * 5,
+        mcp_tools=["mcp__somewhere__lookup"],
+    )
+    opts, _ = M.build_options(arch, ix)
+    assert "mcp__somewhere__lookup" in opts.allowed_tools
+    assert "mcp__ragmod__search" in opts.allowed_tools
+    # 沒登記的 server 連不上，所以不會出現在 mcp_servers，但工具名仍在白名單裡 ——
+    # 這是刻意的：白名單是架構的宣告，能不能連上是執行期的事
+    assert set(opts.mcp_servers) == {"ragmod"}
+
+
+def test_mcp_tools_are_told_apart_in_the_prompt():
+    """外部來源的出處必須跟知識庫分開標，不然使用者分不出哪一句可信。"""
+    arch = M.Architecture(
+        name="x", paper="y", orchestration="Linear", modules=["search"],
+        policy="查一次就好。" * 8, mcp_tools=["mcp__a__b"],
+    )
+    prompt = arch.system_prompt()
+    assert "mcp__a__b" in prompt
+    assert "[mcp:" in prompt

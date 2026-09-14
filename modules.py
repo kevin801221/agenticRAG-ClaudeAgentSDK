@@ -422,6 +422,24 @@ def module_source(name: str) -> str:
         return inspect.getsource(mod["fn"])
     if name in BUILTIN_TOOLS:
         return BUILTIN_NOTE.format(name=name)
+    if name.startswith("mcp__"):
+        # 別人家的程式碼，我們看不到 —— 能給的就是「它是誰、怎麼連上的」
+        import mcp_registry
+
+        server = name.split("__")[1]
+        for rec in mcp_registry.listing():
+            if rec["name"] == server:
+                return (
+                    f"# {name}\n"
+                    f"# 這是外部 MCP server 提供的工具，原始碼不在這個專案裡。\n"
+                    f"# server：{rec['info'].get('name', server)} "
+                    f"{rec['info'].get('version', '')}\n"
+                    f"# 連線設定：{rec['config']}\n"
+                    f"# 它提供的全部工具：{', '.join(rec['tools'])}\n"
+                    f"#\n"
+                    f"# 對編排來說它跟我們自己寫的模組沒有差別 —— 都只是 allowed_tools 裡的一個名字。"
+                )
+        return f"# {name}\n# 外部 MCP 工具（這個 server 目前沒有登記）"
     return f"# 找不到模組 {name}"
 
 
@@ -454,14 +472,29 @@ class Architecture:
     modules: list[str]  # 用到哪些模組
     policy: str  # 這個架構的編排規則
     builtin_tools: list[str] = field(default_factory=list)  # SDK 內建工具，如 WebSearch
+    # 外部 MCP server 的工具，完整名稱 mcp__<server>__<tool>。
+    # 它跟 modules 的差別只有「程式碼是誰寫的」——對編排來說都只是一個名字。
+    mcp_tools: list[str] = field(default_factory=list)
     max_turns: int = 12
 
     def system_prompt(self) -> str:
-        return f"{BASE_POLICY}\n\n## 這次採用的流程：{self.name}\n\n{self.policy.strip()}"
+        head = f"{BASE_POLICY}\n\n## 這次採用的流程：{self.name}\n\n{self.policy.strip()}"
+        if self.mcp_tools:
+            # 外部工具要特別交代出處怎麼標 —— 它回的東西不在知識庫裡，
+            # 使用者必須看得出哪一句有本地片段撐腰、哪一句是外面來的。
+            head += (
+                "\n\n## 這次還接了外部 MCP 工具\n\n"
+                + "\n".join(f"- `{t}`" for t in self.mcp_tools)
+                + "\n\n它們**不是知識庫的一部分**。引用它們回來的內容時，"
+                  "出處要標成 `[mcp: <工具名>]`，不要混進 `[檔名#編號]` 那種知識庫出處。"
+            )
+        return head
 
     def summary(self) -> str:
         stages = sorted({MODULES[m]["stage"] for m in self.modules if m in MODULES})
-        tools = self.modules + [f"{t}(SDK 內建)" for t in self.builtin_tools]
+        tools = (self.modules
+                 + [f"{t}(SDK 內建)" for t in self.builtin_tools]
+                 + [f"{t}(MCP)" for t in self.mcp_tools])
         return (
             f"{self.name}  [{self.orchestration}]\n"
             f"  出處：{self.paper}\n"
@@ -918,6 +951,17 @@ def build_mcp_server(arch: Architecture, ix: Index):
     return create_sdk_mcp_server("ragmod", "1.0.0", sdk_tools)
 
 
+def _short(tool_name: str) -> str:
+    """軌跡面板要顯示的名字。
+
+    我們自己的模組去掉 mcp__ragmod__ 前綴（畫面才不會一排都是同樣的字），
+    外部 MCP 工具**保留完整名字** —— 不同 server 可能有同名工具，砍掉前綴就分不出來了。
+    """
+    if tool_name.startswith("mcp__ragmod__"):
+        return tool_name.rsplit("__", 1)[-1]
+    return tool_name
+
+
 def build_options(arch: Architecture, ix: Index, on_event: Callable[[dict], None] | None = None):
     """把 Architecture 翻譯成 ClaudeAgentOptions。
 
@@ -936,7 +980,7 @@ def build_options(arch: Architecture, ix: Index, on_event: Callable[[dict], None
 
     async def on_pre_tool(data, tool_use_id, context):
         step["n"] += 1
-        name = data["tool_name"].rsplit("__", 1)[-1]
+        name = _short(data["tool_name"])
         step_of[_id(data, tool_use_id)] = step["n"]
         if on_event:
             on_event(
@@ -956,18 +1000,31 @@ def build_options(arch: Architecture, ix: Index, on_event: Callable[[dict], None
                 {
                     "type": "tool_result",
                     "step": step_of.get(_id(data, tool_use_id), step["n"]),
-                    "tool": data["tool_name"].rsplit("__", 1)[-1],
+                    "tool": _short(data["tool_name"]),
                     "summary": summarize(data.get("tool_response")),
                 }
             )
         return {}
 
-    allowed = [f"mcp__ragmod__{m}" for m in arch.modules if m in MODULES] + arch.builtin_tools
+    import mcp_registry
+    import providers
+
+    allowed = ([f"mcp__ragmod__{m}" for m in arch.modules if m in MODULES]
+               + arch.builtin_tools + list(arch.mcp_tools))
+
+    # 只掛這個架構真的用到的外部 server，其餘一個都不連 ——
+    # 連線是有成本的（stdio 要開行程、http 要握手），而且沒用到卻連著等於偷偷擴大授權。
+    servers = {"ragmod": build_mcp_server(arch, ix)}
+    if arch.mcp_tools:
+        want = {t.split("__")[1] for t in arch.mcp_tools if t.startswith("mcp__")}
+        for name, cfg in mcp_registry.configs().items():
+            if name in want:
+                servers[name] = cfg
 
     return (
         ClaudeAgentOptions(
             tools=arch.builtin_tools,  # 只開架構明確要的內建工具，其餘全關
-            mcp_servers={"ragmod": build_mcp_server(arch, ix)},
+            mcp_servers=servers,
             strict_mcp_config=True,
             allowed_tools=allowed,
             setting_sources=[],
@@ -975,6 +1032,9 @@ def build_options(arch: Architecture, ix: Index, on_event: Callable[[dict], None
             max_turns=arch.max_turns,
             permission_mode="bypassPermissions",
             cwd=str(PROJECT_DIR),
+            # 換供應商不用改程式碼，也不用重開 —— env 是每次 spawn 才疊上去的
+            env=providers.env_overlay(),
+            model=providers.model_override(),
             hooks={
                 "PreToolUse": [HookMatcher(hooks=[on_pre_tool])],
                 "PostToolUse": [HookMatcher(hooks=[on_post_tool])],
