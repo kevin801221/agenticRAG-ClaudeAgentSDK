@@ -9,12 +9,13 @@ import asyncio
 import base64
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 load_dotenv()
@@ -200,6 +201,94 @@ async def architectures() -> list[dict]:
         }
         for key, a in ARCHITECTURES.items()
     ]
+
+
+# ══════════ 上傳 → agent 決定怎麼切 → 併進語料庫 ══════════
+
+UPLOAD_DIR = CORPUS_DIR / "uploads"
+ALLOWED_SUFFIX = {".md", ".txt", ".pdf"}
+MAX_UPLOAD = 40 * 1024 * 1024
+
+
+def _safe_name(name: str) -> str:
+    """只取檔名本身，並把路徑分隔與控制字元擋掉。"""
+    base = Path(name or "").name
+    base = re.sub(r"[\x00-\x1f/\\]", "", base).strip() or "untitled"
+    return base[:120]
+
+
+@app.post("/api/upload")
+async def upload(file: UploadFile) -> dict:
+    """先把檔案收下來。真正的切塊與索引在 /api/ingest，因為那要串流進度。"""
+    name = _safe_name(file.filename)
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_SUFFIX:
+        raise HTTPException(400, f"只收 {'、'.join(sorted(ALLOWED_SUFFIX))}，收到 {suffix or '沒有副檔名'}")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "檔案是空的")
+    if len(raw) > MAX_UPLOAD:
+        raise HTTPException(400, f"檔案太大（{len(raw) / 1e6:.1f} MB），上限 {MAX_UPLOAD // 10**6} MB")
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    target = UPLOAD_DIR / name
+    target.write_bytes(raw)
+    rel = f"uploads/{name}"
+    return {"path": rel, "bytes": len(raw), "replaced": any(c.path == rel for c in INDEX.chunks)}
+
+
+@app.get("/api/ingest")
+async def ingest_doc(path: str) -> StreamingResponse:
+    """讓 agent 看一眼文件、決定切塊策略，然後切、嵌入、併進索引。
+
+    用 SSE 串流是為了讓學生看得到 agent 在判斷什麼 ——
+    索引期的決策跟檢索期一樣值得攤開。
+    """
+    import ingest as ING
+
+    target = (CORPUS_DIR / path).resolve()
+    if CORPUS_DIR not in target.parents or not target.is_file():
+        raise HTTPException(404, f"找不到 {path}")
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def emit(event: dict) -> None:
+        queue.put_nowait(event)
+
+    async def worker() -> None:
+        global INDEX
+        try:
+            result = await ING.ingest(
+                target, path, HERE / "data", list(INDEX.chunks),
+                os.getenv("EMBEDDING", "local"), emit,
+            )
+            # 重新載入，讓新片段立刻可以被檢索到
+            INDEX = load_index(
+                HERE / "data",
+                embedding=os.getenv("EMBEDDING", "local"),
+                model_name=os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-small"),
+            )
+            emit({"type": "done", **result, "chunks": len(INDEX.chunks),
+                  "files": len({c.path for c in INDEX.chunks})})
+        except Exception as exc:  # noqa: BLE001
+            emit({"type": "error", "text": f"{type(exc).__name__}: {exc}"})
+        finally:
+            queue.put_nowait(None)
+
+    asyncio.create_task(worker())
+
+    async def stream():
+        while True:
+            event = await queue.get()
+            if event is None:
+                return
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ══════════ 筆記本 ══════════

@@ -354,6 +354,26 @@
 
   footer{border-top:1px solid var(--rail);background:var(--panel);padding:1rem 1.5rem}
   footer > details > summary{padding:0;font-size:.9rem;color:var(--ink)}
+  /* ── 上傳區 ── */
+  .drop{
+    border:1.5px dashed var(--rail);border-radius:6px;padding:.9rem 1rem;margin:.8rem 0;
+    display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;transition:border-color .15s,background .15s;
+  }
+  .drop.over{border-color:var(--signal);background:rgba(242,180,65,.07)}
+  .drop button{padding:.3rem .9rem;font-size:.85rem;align-self:auto}
+  .drop .hint{color:var(--muted);font-size:.82rem;flex:1;min-width:14rem}
+  .ingest{margin:.6rem 0 0;font-size:.85rem}
+  .ingest .line{color:var(--muted);padding:.12rem 0}
+  .ingest .line.now{color:var(--signal)}
+  .ingest .plan{
+    border-left:3px solid var(--signal);background:rgba(242,180,65,.08);
+    padding:.55rem .8rem;border-radius:0 4px 4px 0;margin:.5rem 0;
+  }
+  .ingest .plan dt{font-size:.72rem;color:var(--signal);font-weight:600}
+  .ingest .plan dd{margin:0 0 .35rem;font-size:.86rem}
+  .ingest .plan code{font-family:var(--mono);color:var(--ink)}
+  .ingest .fail{color:var(--alert)}
+
   .corpus{display:grid;gap:.35rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.8rem}
   .cfile{
     display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;
@@ -474,6 +494,15 @@
   </details>
   <details>
     <summary>語料庫 — 點檔名直接看，PDF 會開閱讀器</summary>
+
+    <div class="drop" id="drop">
+      <button type="button" id="pickFile">選擇檔案</button>
+      <span class="hint">或把檔案拖進來。<code>.md</code> <code>.txt</code> <code>.pdf</code>，最大 40 MB ——
+        <strong>agent 會自己看過內容決定怎麼切、要不要補脈絡</strong>，切完併進語料庫就能被檢索到。</span>
+      <input type="file" id="fileInput" accept=".md,.txt,.pdf" hidden>
+    </div>
+    <div class="ingest" id="ingestLog"></div>
+
     <div class="corpus" id="corpusList"></div>
   </details>
   <details>
@@ -698,7 +727,8 @@ EXAMPLES.forEach(text => {
   $('examples').appendChild(b);
 });
 
-fetch('/api/health').then(r => r.json()).then(h => {
+function refreshHealth() {
+ fetch('/api/health').then(r => r.json()).then(h => {
   $('corpus').textContent = h.chunks + ' 片段 · ' + h.files + ' 檔案 · ' + h.vector_store;
   const e = $('engine');
   e.textContent = h.engine_label;
@@ -709,7 +739,9 @@ fetch('/api/health').then(r => r.json()).then(h => {
     w.textContent = '降級：純 BM25，無向量';
     e.after(w);
   }
-});
+ });
+}
+refreshHealth();
 
 Promise.all([
   fetch('/api/pipeline').then(r => r.json()),
@@ -845,7 +877,8 @@ function renderAnswer(text) {
   });
 }
 
-fetch('/api/corpus').then(r => r.json()).then(list => {
+function loadCorpus() {
+ fetch('/api/corpus').then(r => r.json()).then(list => {
   $('corpusList').innerHTML = list.map(f =>
     '<button class="cfile ' + (f.is_pdf ? 'pdf' : 'md') + '" type="button" data-path="' + esc(f.path) + '">' +
       '<span class="kind">' + (f.is_pdf ? 'PDF' : 'MD') + '</span>' +
@@ -860,7 +893,90 @@ fetch('/api/corpus').then(r => r.json()).then(list => {
       document.querySelectorAll('footer details').forEach(d => { d.open = false; });
     };
   });
-});
+ });
+}
+loadCorpus();
+
+/* ══════════ 上傳 → agent 決定怎麼切 → 併進語料庫 ══════════ */
+
+(function () {
+  const drop = $('drop'), input = $('fileInput'), log = $('ingestLog');
+  let busy = false;
+
+  $('pickFile').onclick = () => input.click();
+  input.onchange = () => { if (input.files[0]) upload(input.files[0]); input.value = ''; };
+
+  ['dragenter', 'dragover'].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    if (f) upload(f);
+  });
+
+  function line(text, cls) {
+    const d = document.createElement('div');
+    d.className = 'line ' + (cls || '');
+    d.textContent = text;
+    log.appendChild(d);
+    return d;
+  }
+
+  function upload(file) {
+    if (busy) return;
+    busy = true;
+    log.innerHTML = '';
+    const first = line('上傳 ' + file.name + ' …', 'now');
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fetch('/api/upload', { method: 'POST', body: fd })
+      .then(r => r.json().then(j => r.ok ? j : Promise.reject(j.detail || '上傳失敗')))
+      .then(up => {
+        first.className = 'line';
+        first.textContent = '已上傳 ' + up.path + '（' + Math.round(up.bytes / 1024) + ' KB）' +
+          (up.replaced ? ' · 會覆蓋同名的舊版本' : '');
+        ingest(up.path);
+      })
+      .catch(err => { first.className = 'line fail'; first.textContent = '失敗：' + err; busy = false; });
+  }
+
+  function ingest(path) {
+    let now = line('agent 正在看這份文件…', 'now');
+    const es = new EventSource('/api/ingest?path=' + encodeURIComponent(path));
+
+    es.onmessage = m => {
+      const ev = JSON.parse(m.data);
+      if (ev.type === 'step') {
+        now.className = 'line';
+        now = line(ev.text, 'now');
+      } else if (ev.type === 'plan') {
+        const p = ev.plan;
+        const dl = document.createElement('dl');
+        dl.className = 'plan';
+        dl.innerHTML =
+          '<dt>文件類型</dt><dd>' + esc(p.doc_type) + '</dd>' +
+          '<dt>切法</dt><dd><code>' + esc(p.strategy) + '</code>　每塊上限 <code>' +
+            p.max_chars + '</code> 字　補脈絡 <code>' + (p.context_prefix ? '是' : '否') + '</code></dd>' +
+          '<dt>為什麼</dt><dd>' + esc(p.reason) + '</dd>';
+        log.insertBefore(dl, now);
+      } else if (ev.type === 'done') {
+        now.className = 'line';
+        line('完成：新增 ' + ev.added + ' 個片段 → 語料庫現在有 ' +
+             ev.chunks + ' 片段 / ' + ev.files + ' 檔案');
+        es.close(); busy = false;
+        loadCorpus();
+        refreshHealth();
+      } else if (ev.type === 'error') {
+        now.className = 'line fail';
+        now.textContent = '失敗：' + ev.text;
+        es.close(); busy = false;
+      }
+    };
+    es.onerror = () => { es.close(); busy = false; };
+  }
+})();
 
 /* ══════════ 筆記本 ══════════ */
 

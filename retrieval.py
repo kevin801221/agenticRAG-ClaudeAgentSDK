@@ -29,6 +29,7 @@ class Chunk:
     prev_id: str | None = None
     next_id: str | None = None
     page: int | None = None  # 只有 PDF 有。讓引用可以跳到原文那一頁
+    context: str = ""        # 由 agent 補的一句脈絡，只參與檢索、不顯示給使用者
 
 
 @dataclass
@@ -146,6 +147,15 @@ class Index:
         return self.store.kind if self.store else "none"
 
 
+def embed_text(c: Chunk) -> str:
+    """拿去做向量化（與 BM25 斷詞）的文字。
+
+    不等於顯示給使用者的 text —— 前面還接了 heading 路徑與 agent 補的脈絡句。
+    這就是 Contextual Retrieval 的作法：讓片段脫離上下文也檢索得到。
+    """
+    return "\n".join(p for p in (c.context, c.heading, c.text) if p)
+
+
 def tokenize(text: str) -> list[str]:
     """中文要斷詞，BM25 才有東西可比。索引與查詢必須用同一套。"""
     return [t for t in jieba.lcut(text.lower()) if t.strip()]
@@ -160,7 +170,7 @@ def build_index(
 ) -> Index:
     """vectors 是方便用法（自動包成 NumpyStore）；要接別的向量庫就傳 store。"""
     chunks = list(chunks)
-    corpus = [tokenize(f"{c.heading} {c.text}") for c in chunks]
+    corpus = [tokenize(embed_text(c)) for c in chunks]
     if store is None and vectors is not None:
         store = NumpyStore(chunks, vectors)
     return Index(

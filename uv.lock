@@ -18,6 +18,7 @@ dependencies = [
     { name = "litellm" },
     { name = "numpy" },
     { name = "python-dotenv" },
+    { name = "python-multipart" },
     { name = "rank-bm25" },
     { name = "uvicorn" },
 ]
@@ -51,6 +52,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "pymupdf", marker = "extra == 'pdf'", specifier = ">=1.28.2" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "sentence-transformers", marker = "extra == 'embeddings'", specifier = ">=3.0" },
     { name = "torch", marker = "extra == 'embeddings'", specifier = ">=2.2" },

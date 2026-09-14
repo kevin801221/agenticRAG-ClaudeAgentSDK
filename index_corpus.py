@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 from dotenv import load_dotenv
 
-from retrieval import Chunk, load_encoder, save_index
+from retrieval import Chunk, embed_text, load_encoder, save_index
 
 MAX_CHARS = 1200  # 超過就拆
 MIN_CHARS = 100  # 不到就併進下一塊
@@ -247,7 +247,7 @@ def main() -> None:
             print(f"載入 embedding 模型 {model_name}（第一次會下載，約 100MB）…")
             encode = load_encoder(model_name)
             vectors = np.asarray(
-                encode([f"{c.heading}\n{c.text}" for c in chunks]), dtype="float32"
+                encode([embed_text(c) for c in chunks]), dtype="float32"
             )
         except Exception as exc:
             print(f"[warn] embedding 失敗，改建純 BM25 索引：{exc}")
