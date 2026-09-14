@@ -20,9 +20,13 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 load_dotenv()
 
+import architect  # noqa: E402
 from engines import check_config, describe_engine, get_engine  # noqa: E402
 from modules import ARCHITECTURES, BUILTIN_TOOLS, MODULES  # noqa: E402
 from retrieval import load_index  # noqa: E402
+
+# 使用者自己組的架構跟內建的平起平坐 —— 它們是同一種東西（一份 Architecture）
+ARCHITECTURES.update(architect.load_all())
 
 HERE = Path(__file__).resolve().parent
 ENGINE = os.getenv("ENGINE", "agent_sdk")
@@ -198,6 +202,7 @@ async def architectures() -> list[dict]:
             "modules": a.modules,
             "builtin_tools": a.builtin_tools,
             "policy": a.policy.strip(),
+            "custom": key.startswith("custom_"),
         }
         for key, a in ARCHITECTURES.items()
     ]
@@ -412,6 +417,45 @@ async def export_notes() -> Response:
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="agentic-rag-notes.md"'},
     )
+
+
+# ══════════ 架構師：聊出一份 Architecture ══════════
+
+
+@app.post("/api/architect")
+async def architect_turn(body: dict = Body(...)) -> dict:
+    """跑一輪對話。
+
+    完整對話紀錄由前端每次送回來（無狀態）—— 實作簡單，
+    而且學生看得到 agent 每一輪收到什麼，不會又變成黑盒子。
+    """
+    history = body.get("history") or []
+    if not isinstance(history, list) or not history:
+        raise HTTPException(400, "history 不能是空的")
+    if len(history) > 40:
+        raise HTTPException(400, "對話太長了，重新開一輪比較有效率")
+    return await architect.turn(history)
+
+
+@app.post("/api/architect/save")
+async def architect_save(spec: dict = Body(...)) -> dict:
+    """把架構存起來並立刻註冊 —— 存完就能在選單裡選、拿去並排比較。"""
+    ok, why = architect.validate(spec)
+    if not ok:
+        raise HTTPException(400, why)
+    key = architect.save(spec)
+    ARCHITECTURES[key] = architect.to_architecture(spec)
+    return {"key": key, "name": spec["name"], "total": len(ARCHITECTURES)}
+
+
+@app.delete("/api/architect/{key}")
+async def architect_delete(key: str) -> dict:
+    if not key.startswith("custom_"):
+        raise HTTPException(400, "只能刪自訂架構")
+    if not architect.delete(key):
+        raise HTTPException(404, f"沒有這個架構：{key}")
+    ARCHITECTURES.pop(key, None)
+    return {"deleted": key, "total": len(ARCHITECTURES)}
 
 
 @app.get("/api/compare")

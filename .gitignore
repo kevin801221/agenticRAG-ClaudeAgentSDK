@@ -13,3 +13,6 @@ notes/
 
 # 上傳的文件是使用者自己的，不進 repo
 corpus/uploads/
+
+# 自訂架構是使用者組出來的，預設不進 repo（要分享就手動加）
+architectures/

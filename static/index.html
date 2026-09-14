@@ -289,6 +289,28 @@
   }
   .chip:hover{border-color:var(--signal);color:var(--ink)}
 
+  /* ── 架構師 ── */
+  .archbtn{
+    padding:.2rem .7rem;font-size:.78rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail);border-radius:3px;
+  }
+  .archbtn:hover{border-color:var(--signal);color:var(--signal)}
+  .spec{
+    border:1px solid var(--signal);border-radius:6px;padding:.8rem 1rem;margin:.3rem 0 .6rem;
+    background:rgba(242,180,65,.06);
+  }
+  .spec h3{margin:0 0 .3rem;font-size:1rem;color:var(--signal)}
+  .spec .meta{font-family:var(--mono);font-size:.76rem;color:var(--muted);margin-bottom:.5rem}
+  .spec .why{font-size:.88rem;margin-bottom:.6rem}
+  .spec pre{
+    white-space:pre-wrap;max-height:16rem;overflow-y:auto;font-size:.78rem;
+    background:#11162a;padding:.6rem;border-radius:4px;line-height:1.6;
+  }
+  .spec .row{display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap}
+  .spec .row button{padding:.25rem .8rem;font-size:.82rem;align-self:auto}
+  .spec .row .ghost{background:none;color:var(--muted);border:1px solid var(--rail);font-weight:400}
+  .spec .row .ghost:hover{color:var(--ink);border-color:var(--signal)}
+
   /* ── 並排比較 ── */
   .cmpbar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}
   .cmpbar label{display:flex;align-items:center;gap:.35rem;cursor:pointer}
@@ -524,6 +546,7 @@
       <label class="archpick"><span>架構</span><select id="arch"></select></label>
       <div class="archinfo" id="archinfo"></div>
       <div class="cmpbar">
+        <button type="button" class="archbtn" id="openArchitect">讓 agent 幫我組一個</button>
         <label><input type="checkbox" id="cmpOn"> 並排比較</label>
         <select id="arch2" class="hidden"></select>
         <select id="arch3" class="hidden"></select>
@@ -561,6 +584,15 @@
       <h2>決策軌跡</h2>
       <div class="trace" id="trace"></div>
       <p class="empty" id="empty">還沒開始。每次 agent 選一個做法、呼叫一個模組，上面會亮、這裡會長出一段。</p>
+    </div>
+
+    <div id="architectView" class="hidden">
+      <h2>架構師 — 聊出一個適合你的架構</h2>
+      <div class="chatlog" id="archLog"></div>
+      <form id="archForm">
+        <textarea id="archQ" placeholder="先講一下你的情境：什麼語料、誰在用、大概問什麼" required></textarea>
+        <button id="archGo" type="submit">送出</button>
+      </form>
     </div>
 
     <div id="cmpView" class="hidden">
@@ -868,7 +900,8 @@ Promise.all([
   ARCHS = res[1];
 
   $('arch').innerHTML = ARCHS.map(a =>
-    '<option value="' + a.key + '"' + (a.key === 'crag' ? ' selected' : '') + '>' + esc(a.name) + '</option>').join('');
+    '<option value="' + a.key + '"' + (a.key === 'crag' ? ' selected' : '') + '>' +
+    esc(a.name) + (a.custom ? '（自訂）' : '') + '</option>').join('');
   $('arch').onchange = showArch;
   showArch();
   cmpFillSelects();
@@ -914,6 +947,7 @@ function ask(question) {
     return;
   }
   $('cmpView').classList.add('hidden');
+  $('architectView').classList.add('hidden');
   $('traceView').classList.remove('hidden');
 
   const es = new EventSource('/api/ask?q=' + encodeURIComponent(question)
@@ -1024,6 +1058,127 @@ function loadCorpus() {
 }
 loadCorpus();
 
+/* ══════════ 架構師：聊出一份 Architecture ══════════ */
+
+/* 這是 Adaptive-RAG 的「選型」升一層 —— Adaptive 替一個問題選路線，
+   架構師替一個使用情境選架構。能這麼小是因為 Architecture 本來就是資料。 */
+
+const ARCHCHAT = { history: [], busy: false };
+
+$('openArchitect').onclick = () => {
+  ['traceView', 'cmpView', 'docChat', 'docView'].forEach(id => $(id).classList.add('hidden'));
+  $('askView').classList.remove('hidden');
+  $('architectView').classList.remove('hidden');
+  if (!ARCHCHAT.history.length) {
+    archBubble('ai',
+      '跟我說一下你的情境就好 —— 什麼樣的語料、誰在用、大概會問什麼。' +
+      '我會問幾個會影響架構的問題（每個都會說明為什麼問），然後給你一份可以直接套用的架構。');
+  }
+  $('archQ').focus();
+};
+
+function archBubble(who, text, raw) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + (who === 'me' ? 'me' : 'ai');
+  d.innerHTML = who === 'me'
+    ? '<div class="q">' + esc(text) + '</div>'
+    : '<div class="body">' + md(raw === undefined ? text : raw) + '</div>';
+  $('archLog').appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+  return d;
+}
+
+$('archForm').onsubmit = ev => {
+  ev.preventDefault();
+  const t = $('archQ').value.trim();
+  if (!t || ARCHCHAT.busy) return;
+  $('archQ').value = '';
+  archBubble('me', t);
+  ARCHCHAT.history.push({ role: 'user', text: t });
+  archTurn();
+};
+
+function archTurn() {
+  ARCHCHAT.busy = true;
+  $('archGo').disabled = true;
+  const thinking = archBubble('ai', '想一下…');
+
+  fetch('/api/architect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ history: ARCHCHAT.history }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '出錯了')))
+    .then(d => {
+      ARCHCHAT.history.push({ role: 'assistant', text: d.reply });
+      // 產出架構時，把 JSON 那段從氣泡裡拿掉 —— 改用下面的卡片呈現，比較好讀
+      const shown = d.architecture
+        ? d.reply.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/, '').trim()
+        : d.reply;
+      thinking.querySelector('.body').innerHTML = md(shown);
+      if (d.architecture) archSpecCard(d.architecture);
+      thinking.scrollIntoView({ block: 'nearest' });
+    })
+    .catch(err => { thinking.querySelector('.body').textContent = '失敗：' + err; })
+    .finally(() => { ARCHCHAT.busy = false; $('archGo').disabled = false; });
+}
+
+function archSpecCard(spec) {
+  const mods = (spec.modules || []).concat(spec.builtin_tools || []);
+  const card = document.createElement('div');
+  card.className = 'spec';
+  card.innerHTML =
+    '<h3>' + esc(spec.name || '未命名') + '</h3>' +
+    '<div class="meta">' + esc(spec.orchestration || '') + '　·　' + mods.map(esc).join(' · ') +
+      '　·　max_turns ' + (spec.max_turns || 12) + '</div>' +
+    (spec.why ? '<div class="why">' + esc(spec.why) + '</div>' : '') +
+    '<details><summary>看它寫的 policy（這份架構的靈魂）</summary><pre>' +
+      esc(spec.policy || '') + '</pre></details>' +
+    '<div class="row"></div>';
+  const row = card.querySelector('.row');
+
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.textContent = '存起來並套用';
+  save.onclick = () => {
+    save.disabled = true;
+    save.textContent = '存檔中…';
+    fetch('/api/architect/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(spec),
+    })
+      .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '存檔失敗')))
+      .then(d => {
+        save.textContent = '✓ 已存';
+        // 重新載入清單，然後自動選起來 —— 存完就能馬上拿去跑
+        return fetch('/api/architectures').then(r => r.json()).then(list => {
+          ARCHS = list;
+          $('arch').innerHTML = list.map(a =>
+            '<option value="' + a.key + '">' + esc(a.name) + (a.custom ? '（自訂）' : '') + '</option>').join('');
+          cmpFillSelects();
+          $('arch').value = d.key;
+          showArch();
+          row.insertAdjacentHTML('beforeend',
+            '<span class="pipe-meta">已加進選單。' +
+            '建議勾「並排比較」跟 Naive RAG 對跑一題，看它到底有沒有比較好。</span>');
+        });
+      })
+      .catch(err => { save.disabled = false; save.textContent = '存檔失敗：' + err; });
+  };
+  row.appendChild(save);
+
+  const again = document.createElement('button');
+  again.type = 'button';
+  again.className = 'ghost';
+  again.textContent = '我想改一下';
+  again.onclick = () => { $('archQ').focus(); };
+  row.appendChild(again);
+
+  $('archLog').appendChild(card);
+  card.scrollIntoView({ block: 'nearest' });
+}
+
 /* ══════════ 並排比較 ══════════ */
 
 /* 同一題、同一組模組、同一份語料，只有編排不同 —— 差別全部攤在同一個畫面上。
@@ -1056,6 +1211,7 @@ function cmpFillSelects() {
 
 function cmpStart(question, keys) {
   $('traceView').classList.add('hidden');
+  $('architectView').classList.add('hidden');
   $('cmpView').classList.remove('hidden');
   $('cmpSummary').innerHTML = '';
   CMP.cols = {};
@@ -1500,6 +1656,7 @@ function openDoc(path, isPdf, page) {
   $('askView').classList.add('hidden');
   $('traceView').classList.add('hidden');
   $('cmpView').classList.add('hidden');
+  $('architectView').classList.add('hidden');
   $('docView').classList.remove('hidden');
   $('docChat').classList.remove('hidden');
   $('docName').textContent = path;
