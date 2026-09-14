@@ -289,6 +289,59 @@
   }
   .chip:hover{border-color:var(--signal);color:var(--ink)}
 
+  /* ── 拖拉組裝台 ── */
+  .chip{
+    display:inline-block;font-family:var(--mono);font-size:.76rem;
+    padding:.2rem .55rem;margin:0 .3rem .3rem 0;border-radius:3px;
+    border:1px solid var(--rail);background:var(--panel-2);color:var(--ink);
+    cursor:grab;user-select:none;
+  }
+  .chip:hover{border-color:var(--signal)}
+  .chip.builtin{color:var(--ext);border-color:rgba(143,168,255,.4)}
+  .chip.used{opacity:.3;cursor:default}
+  .chip.used:hover{border-color:var(--rail)}
+  .chip .x{color:var(--muted);margin-left:.35rem;cursor:pointer;font-style:normal}
+  .chip .x:hover{color:var(--alert)}
+
+  .palette{border:1px solid var(--rail);border-radius:5px;padding:.5rem .7rem;margin-bottom:.7rem}
+  .palette .grp{margin-bottom:.35rem}
+  .palette .grp:last-child{margin-bottom:0}
+  .palette .lbl{font-family:var(--mono);font-size:.7rem;color:var(--muted);
+    display:block;margin-bottom:.2rem}
+
+  .lane{
+    display:flex;align-items:flex-start;gap:.6rem;
+    border:1px dashed var(--rail);border-radius:5px;padding:.4rem .6rem;margin-bottom:.35rem;
+    min-height:2.4rem;transition:border-color .12s,background .12s;
+  }
+  .lane.over{border-color:var(--signal);background:rgba(242,180,65,.08)}
+  .lane.nope{border-color:var(--alert);background:rgba(255,122,107,.08)}
+  .lane .sname{font-family:var(--mono);font-size:.72rem;color:var(--muted);
+    flex:0 0 6.5rem;padding-top:.25rem}
+  .lane .slot{flex:1;min-height:1.6rem}
+  .lane .hint{color:var(--muted);font-size:.76rem;padding-top:.25rem}
+
+  .bdrow{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.6rem 0}
+  .bdrow label{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:.3rem}
+  .bdrow input,.bdrow select{font-size:.82rem;padding:.2rem .4rem}
+  .bdrow input[type=number]{width:4rem}
+  .bdrow #bdName{width:11rem}
+  .bdrow #bdOrch{width:14rem}
+  .bdrow button{padding:.25rem .8rem;font-size:.82rem;align-self:auto}
+  .bdrow .ghost{background:none;color:var(--muted);border:1px solid var(--rail);font-weight:400}
+  .bdrow .ghost:hover{color:var(--ink);border-color:var(--signal)}
+
+  .bdpolicy textarea{width:100%;min-height:9rem;font-family:var(--mono);font-size:.78rem;
+    line-height:1.65;resize:vertical}
+  .bdwarn{
+    border-left:2px solid var(--alert);padding:.35rem .7rem;margin:.4rem 0;
+    font-size:.82rem;color:var(--ink);background:rgba(255,122,107,.07);
+  }
+  .bdwarn b{color:var(--alert)}
+  .bdmsg{font-family:var(--mono);font-size:.76rem;color:var(--muted)}
+  .bdmsg.bad{color:var(--alert)}
+  .bdmsg.good{color:var(--ok)}
+
   /* ── 重播 ── */
   .replaybar{
     display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem;
@@ -578,6 +631,7 @@
       <div class="archinfo" id="archinfo"></div>
       <div class="cmpbar">
         <button type="button" class="archbtn" id="openArchitect">讓 agent 幫我組一個</button>
+        <button type="button" class="archbtn" id="openBuilder">自己拖一個</button>
         <button type="button" class="archbtn" id="openReplay">重播</button>
         <label><input type="checkbox" id="cmpOn"> 並排比較</label>
         <select id="arch2" class="hidden"></select>
@@ -626,6 +680,41 @@
       <span class="pos" id="rpPos"></span>
       <button type="button" class="ghost" id="rpAgain">重來</button>
       <button type="button" class="ghost" id="rpExit">離開重播</button>
+    </div>
+
+    <div id="builderView" class="hidden">
+      <h2>自己拖一個架構</h2>
+      <p class="empty">從上面的模組庫拖到下面的階段。模組決定「有什麼能力」，
+        policy 決定「什麼時候用、怎麼判斷、失敗了怎麼辦」—— 兩個都給了才算一個架構。</p>
+
+      <div class="bdrow">
+        <label>從現有架構開始改
+          <select id="bdFrom"><option value="">（從空白開始）</option></select></label>
+      </div>
+
+      <div class="palette" id="bdPalette"></div>
+      <div id="bdLanes"></div>
+      <p class="bdmsg" id="bdDrop"></p>
+
+      <div class="bdrow">
+        <label>名字 <input id="bdName" placeholder="例如：客服知識庫用"></label>
+        <label>編排 <input id="bdOrch" placeholder="Linear / Conditional / Branching / Looping"></label>
+        <label>上限 <input id="bdTurns" type="number" min="1" max="30" value="12"></label>
+      </div>
+
+      <div class="bdpolicy">
+        <div class="bdrow">
+          <strong style="font-size:.9rem">policy — 這份架構的靈魂</strong>
+          <button type="button" class="ghost" id="bdWrite">讓 agent 幫我寫</button>
+        </div>
+        <textarea id="bdPolicy" placeholder="什麼時候用哪個模組、判斷條件是什麼、失敗了怎麼辦、答案要怎麼標出處。"></textarea>
+        <div class="bdwarn hidden" id="bdWarn"></div>
+      </div>
+
+      <div class="bdrow">
+        <button type="button" id="bdSave">存起來並套用</button>
+        <span class="bdmsg" id="bdMsg"></span>
+      </div>
     </div>
 
     <div id="replayView" class="hidden">
@@ -1003,6 +1092,7 @@ function ask(question) {
   }
   $('cmpView').classList.add('hidden');
   $('architectView').classList.add('hidden');
+  $('builderView').classList.add('hidden');
   $('traceView').classList.remove('hidden');
 
   const es = new EventSource('/api/ask?q=' + encodeURIComponent(question)
@@ -1113,6 +1203,198 @@ function loadCorpus() {
 }
 loadCorpus();
 
+/* ══════════ 拖拉組裝台 ══════════ */
+
+/* 這個畫面存在的理由不是「拖起來很好玩」，是要讓人親手撞到那件事：
+   拖完之後你有一份模組清單，但它跑起來跟 Naive RAG 一模一樣 ——
+   因為 policy 還是空的。模組是能力，policy 才是編排。 */
+
+const BD = { picked: [], stageOf: {}, builtin: {} };
+
+$('openBuilder').onclick = () => {
+  ['traceView', 'cmpView', 'docChat', 'architectView', 'replayView'].forEach(
+    id => $(id).classList.add('hidden'));
+  $('builderView').classList.remove('hidden');
+  if (!$('bdPalette').children.length) bdBuild();
+  bdFillFrom();
+};
+
+/** 模組庫 + 階段車道，兩邊都從 /api/pipeline 來的同一份 STAGES 長出來 */
+function bdBuild() {
+  const stages = STAGES.filter(s => s.stage !== 'Generation');
+  stages.forEach(st => st.modules.forEach(m => {
+    BD.stageOf[m.name] = st.stage;
+    BD.builtin[m.name] = !!m.builtin;
+  }));
+
+  $('bdPalette').innerHTML = stages.map(st =>
+    '<div class="grp"><span class="lbl">' + esc(st.stage) + '</span>' +
+    st.modules.map(m =>
+      '<span class="chip' + (m.builtin ? ' builtin' : '') + '" draggable="true"' +
+      ' data-name="' + esc(m.name) + '" title="' + esc(m.description) + '">' +
+      esc(m.name) + '</span>').join('') +
+    '</div>').join('');
+
+  $('bdPalette').querySelectorAll('.chip').forEach(c => {
+    c.ondragstart = e => e.dataTransfer.setData('text/plain', c.dataset.name);
+    c.onclick = () => bdAdd(c.dataset.name);      // 不想拖的人點一下也行
+  });
+
+  $('bdLanes').innerHTML = stages.map(st =>
+    '<div class="lane" data-stage="' + esc(st.stage) + '">' +
+      '<span class="sname">' + esc(st.stage) + '</span>' +
+      '<span class="slot"></span>' +
+    '</div>').join('');
+
+  $('bdLanes').querySelectorAll('.lane').forEach(lane => {
+    lane.ondragover = e => { e.preventDefault(); lane.classList.add('over'); };
+    lane.ondragleave = () => lane.classList.remove('over');
+    lane.ondrop = e => {
+      e.preventDefault();
+      lane.classList.remove('over');
+      bdAdd(e.dataTransfer.getData('text/plain'), lane);
+    };
+  });
+  bdPaint();
+}
+
+/** 丟錯車道要擋下來 —— 每個模組屬於哪個階段，是 Modular RAG 的分類本身 */
+function bdAdd(name, lane) {
+  const stage = BD.stageOf[name];
+  if (!stage) return;
+  if (lane && lane.dataset.stage !== stage) {
+    lane.classList.add('nope');
+    setTimeout(() => lane.classList.remove('nope'), 700);
+    $('bdDrop').textContent = name + ' 是 ' + stage + ' 階段的模組，放不進 ' + lane.dataset.stage + '。';
+    $('bdDrop').className = 'bdmsg bad';
+    return;
+  }
+  if (BD.picked.indexOf(name) < 0) BD.picked.push(name);
+  $('bdDrop').textContent = '';
+  bdPaint();
+}
+
+function bdRemove(name) {
+  BD.picked = BD.picked.filter(n => n !== name);
+  bdPaint();
+}
+
+function bdPaint() {
+  $('bdLanes').querySelectorAll('.lane').forEach(lane => {
+    const mine = BD.picked.filter(n => BD.stageOf[n] === lane.dataset.stage);
+    const slot = lane.querySelector('.slot');
+    slot.innerHTML = mine.length
+      ? mine.map(n => '<span class="chip' + (BD.builtin[n] ? ' builtin' : '') + '" data-name="' +
+          esc(n) + '">' + esc(n) + '<i class="x">✕</i></span>').join('')
+      : '<span class="hint">拖模組到這裡（空著也可以 —— Naive RAG 就只有 Retrieval）</span>';
+    slot.querySelectorAll('.x').forEach(x => {
+      x.onclick = () => bdRemove(x.parentNode.dataset.name);
+    });
+  });
+  $('bdPalette').querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('used', BD.picked.indexOf(c.dataset.name) >= 0);
+  });
+  bdWarn();
+}
+
+/** 整個畫面的重點就在這段字 */
+function bdWarn() {
+  const box = $('bdWarn');
+  const hasMods = BD.picked.length > 0;
+  const hasPolicy = $('bdPolicy').value.trim().length > 0;
+  if (hasMods && !hasPolicy) {
+    box.classList.remove('hidden');
+    box.innerHTML = '<b>模組有了，但它現在跟 Naive RAG 跑起來一模一樣。</b> ' +
+      '模組只是「有這個能力」，agent 不知道什麼時候該用 —— 那是 policy 的事。' +
+      '自己寫，或按上面那顆讓 agent 寫，然後<strong>一定要並排比較驗證</strong>。';
+  } else {
+    box.classList.add('hidden');
+  }
+}
+$('bdPolicy').oninput = bdWarn;
+
+/** 大部分人不是從零開始，是想把某個現成架構改一點 */
+function bdFillFrom() {
+  const cur = $('bdFrom').value;
+  $('bdFrom').innerHTML = '<option value="">（從空白開始）</option>' +
+    ARCHS.map(a => '<option value="' + a.key + '">' + esc(a.name) + '</option>').join('');
+  $('bdFrom').value = cur;
+}
+
+$('bdFrom').onchange = () => {
+  const a = ARCHS.filter(x => x.key === $('bdFrom').value)[0];
+  if (!a) { BD.picked = []; $('bdPolicy').value = ''; $('bdName').value = ''; bdPaint(); return; }
+  BD.picked = a.modules.concat(a.builtin_tools || []).filter(n => BD.stageOf[n]);
+  $('bdPolicy').value = a.policy || '';
+  $('bdOrch').value = a.orchestration || '';
+  $('bdName').value = a.name + '（改）';
+  bdPaint();
+};
+
+function bdSpec() {
+  return {
+    name: $('bdName').value.trim(),
+    orchestration: $('bdOrch').value.trim() || 'Linear',
+    modules: BD.picked.filter(n => !BD.builtin[n]),
+    builtin_tools: BD.picked.filter(n => BD.builtin[n]),
+    max_turns: parseInt($('bdTurns').value, 10) || 12,
+    policy: $('bdPolicy').value.trim(),
+    why: '在組裝台上自己拖出來的',
+  };
+}
+
+function bdSay(text, kind) {
+  $('bdMsg').textContent = text;
+  $('bdMsg').className = 'bdmsg' + (kind ? ' ' + kind : '');
+}
+
+$('bdWrite').onclick = () => {
+  const spec = bdSpec();
+  if (!spec.modules.length) return bdSay('先拖至少一個模組進來', 'bad');
+  $('bdWrite').disabled = true;
+  bdSay('agent 正在寫 policy…（20-40 秒）');
+  fetch('/api/architect/policy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modules: spec.modules, builtin_tools: spec.builtin_tools }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '失敗')))
+    .then(d => {
+      $('bdPolicy').value = d.policy || '';
+      if (d.orchestration) $('bdOrch').value = d.orchestration;
+      // why 裡常常會點出「你這組模組哪裡怪怪的」—— 那句話比 policy 本身更值得看
+      bdSay(d.why || '寫好了', 'good');
+      bdWarn();
+    })
+    .catch(err => bdSay('失敗：' + err, 'bad'))
+    .finally(() => { $('bdWrite').disabled = false; });
+};
+
+$('bdSave').onclick = () => {
+  const spec = bdSpec();
+  if (!spec.name) return bdSay('先給它一個名字', 'bad');
+  if (!spec.modules.length) return bdSay('至少要一個模組', 'bad');
+  if (!spec.policy) return bdSay('policy 是空的 —— 那等於沒有編排', 'bad');
+  $('bdSave').disabled = true;
+  bdSay('存檔中…');
+  fetch('/api/architect/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(spec),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.detail || '存檔失敗')))
+    .then(d => fetch('/api/architectures').then(r => r.json()).then(list => {
+      ARCHS = list;
+      $('arch').innerHTML = list.map(a =>
+        '<option value="' + a.key + '">' + esc(a.name) + (a.custom ? '（自訂）' : '') + '</option>').join('');
+      cmpFillSelects();
+      bdFillFrom();
+      $('arch').value = d.key;
+      showArch();
+      bdSay('已加進選單。拿去跟 Naive RAG 並排跑一題，看它到底有沒有比較好。', 'good');
+    }))
+    .catch(err => bdSay('失敗：' + err, 'bad'))
+    .finally(() => { $('bdSave').disabled = false; });
+};
+
 /* ══════════ 軌跡重播 ══════════ */
 
 /* 重播餵的是**同一組事件**，所以直接呼叫原本的 handle() / cmpHandle() ——
@@ -1123,7 +1405,8 @@ const PLAY = { trace: null, i: 0, timer: null, playing: false };
 const FAKE_ES = { close() {} };
 
 $('openReplay').onclick = () => {
-  ['traceView', 'cmpView', 'docChat', 'architectView'].forEach(id => $(id).classList.add('hidden'));
+  ['traceView', 'cmpView', 'docChat', 'architectView', 'builderView'].forEach(
+    id => $(id).classList.add('hidden'));
   $('replayView').classList.remove('hidden');
   loadTraces();
 };
@@ -1281,7 +1564,7 @@ function exitReplay() {
   $('replayBar').classList.add('hidden');
   $('replayView').classList.add('hidden');
   $('cmpView').classList.add('hidden');
-  $('traceView').classList.remove('hidden');
+  if ($('builderView').classList.contains('hidden')) $('traceView').classList.remove('hidden');
 }
 
 /* ══════════ 架構師：聊出一份 Architecture ══════════ */
@@ -1292,7 +1575,8 @@ function exitReplay() {
 const ARCHCHAT = { history: [], busy: false };
 
 $('openArchitect').onclick = () => {
-  ['traceView', 'cmpView', 'docChat', 'docView'].forEach(id => $(id).classList.add('hidden'));
+  ['traceView', 'cmpView', 'docChat', 'docView', 'builderView', 'replayView'].forEach(
+    id => $(id).classList.add('hidden'));
   $('askView').classList.remove('hidden');
   $('architectView').classList.remove('hidden');
   if (!ARCHCHAT.history.length) {
@@ -1438,6 +1722,7 @@ function cmpFillSelects() {
 function cmpStart(question, keys) {
   $('traceView').classList.add('hidden');
   $('architectView').classList.add('hidden');
+  $('builderView').classList.add('hidden');
   $('cmpView').classList.remove('hidden');
   CMP.t0 = Date.now();
   cmpPrepare(keys);
@@ -1869,6 +2154,7 @@ function openDoc(path, isPdf, page) {
   $('traceView').classList.add('hidden');
   $('cmpView').classList.add('hidden');
   $('architectView').classList.add('hidden');
+  $('builderView').classList.add('hidden');
   $('docView').classList.remove('hidden');
   $('docChat').classList.remove('hidden');
   $('docName').textContent = path;

@@ -251,6 +251,11 @@ def list_corpus(ix: Index) -> dict:
 # 模組註冊表
 # ═══════════════════════════════════════════════════════════
 
+# Modular RAG 的階段順序。放在這裡而不是 app.py —— 階段是模組的分類，
+# 流程圖、拖拉組裝台的車道、測試都靠它，不是某個網頁端點的私有常數。
+STAGE_ORDER = ["Indexing", "Pre-retrieval", "Retrieval", "Post-retrieval"]
+
+
 MODULES: dict[str, dict[str, Any]] = {
     "list_corpus": {
         "stage": "Indexing",

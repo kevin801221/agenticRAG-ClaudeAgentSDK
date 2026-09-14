@@ -192,6 +192,42 @@ uv run uvicorn app:app --reload
 > 這是 Adaptive-RAG 的「選型」升一層：Adaptive 替**一個問題**選路線，
 > 架構師替**一個使用情境**選架構。而且建議完可以馬上並排驗證 —— 建議與驗證在同一個畫面。
 
+### 自己拖一個：組裝台
+
+第三種做架構的方式（前兩種是手寫 JSON、跟架構師聊）。按「自己拖一個」：
+
+```
+模組庫    Indexing      [list_corpus]
+          Pre-retrieval [multi_search] [hyde_search]
+          Retrieval     [search] [WebSearch]
+          Post-retrieval[grade_documents] [expand] [diversify]
+              │ 拖
+              ▼
+你的架構  Indexing      ┆ （空著也可以）
+          Pre-retrieval ┆
+          Retrieval     ┆ [search ✕]
+          Post-retrieval┆ [grade_documents ✕] [diversify ✕]
+```
+
+丟錯車道會被擋下來，並告訴你「`grade_documents` 是 Post-retrieval 階段的模組」——
+階段分類本身就是 Modular RAG 的骨架，撞一次比講十次有用。
+
+**但這個畫面真正的重點是拖完之後那行紅字：**
+
+> **模組有了，但它現在跟 Naive RAG 跑起來一模一樣。**
+> 模組只是「有這個能力」，agent 不知道什麼時候該用 —— 那是 policy 的事。
+
+這是整套教材最容易被跳過的一層。市面上的「拖拉式 RAG builder」給你一張漂亮的流程圖，
+但**流程圖不是編排**，agent 不會因為你把方塊排好就照著跑。真正的編排是那段 policy 字串。
+
+不想自己寫的話按「讓 agent 幫我寫」—— 它只做這一件事，而且常常會順便點出你這組模組的問題：
+
+> 「一個明顯的缺口是 WebSearch 的結果沒有對應的評分模組（`grade_documents` 只能吃知識庫片段），
+> 所以外部證據只能靠雙來源這種比較粗的規則把關，可信度天生低一階。」
+
+也可以「從現有架構開始改」—— 載入 CRAG、拿掉 `expand`、換成 `diversify`、重寫 policy、
+存成新的，再跟原版並排跑一題。**這就是這套教材希望學生養成的習慣：改一個地方，量一次。**
+
 ### 並排比較：同一題同時跑兩三個架構
 
 勾「並排比較」再選第二、第三個架構，**同一題平行跑**，兩條軌跡並排長出來，
@@ -405,7 +441,7 @@ modules.py        ⭐ 模組庫 + Architecture + 七個現成架構 + arun()
 retrieval.py         BM25(jieba) + 向量(e5-small/MPS) + RRF + 可插拔向量 store
 index_corpus.py      切塊建索引（markdown 按 heading、PDF 按頁）
 ingest.py         ⭐ 上傳文件 → agent 決定怎麼切、要不要補脈絡 → 併進語料庫
-architect.py         架構師：聊幾輪，吐出一份可驗證的 Architecture JSON
+architect.py         架構師：聊幾輪吐出 Architecture JSON；也負責替組裝台寫 policy
 traces.py            軌跡錄影與重播（不呼叫 LLM）
 corpus/              範例語料：Claude Code 參考文件（.md）+ papers/（.pdf，用腳本抓）
 scripts/             fetch_papers.sh —— 從 arXiv 抓論文

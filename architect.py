@@ -127,6 +127,80 @@ async def turn(history: list[dict]) -> dict:
     return {"reply": reply, "architecture": _json_block(reply)}
 
 
+POLICY_SYSTEM = """你是 RAG 架構顧問。使用者已經自己選好要用哪些模組，你只要寫 policy。
+
+## 他選的模組
+
+{picked}
+
+## 為什麼只寫 policy
+
+模組決定「有什麼能力」，policy 決定「什麼時候用、怎麼判斷、失敗了怎麼辦」。
+同一組模組配不同 policy 會是完全不同的架構 —— 所以 policy 才是這份架構的本體。
+
+## 怎麼寫
+
+寫得像流程說明，不要寫形容詞：
+
+- 壞：「謹慎地檢索並確保答案正確」
+- 好：「先用 search 查一次。用 grade_documents 讀完整內文逐塊給 0-2 分。
+  多數低於 1 分就改寫 query 再查一輪，兩輪都不行就明講知識庫沒有，不要用背景知識補。」
+
+要包含：什麼時候用哪個模組、判斷條件、失敗了怎麼辦、答案要怎麼標出處。
+**只能用上面列出的模組**，一個都不能多。每一個都要在 policy 裡出現 ——
+如果某個模組你想不到什麼時候該用，那就直接說它不該被選進來。
+
+## 輸出
+
+只輸出一個 JSON code block，不要別的：
+
+```json
+{{
+  "policy": "……",
+  "orchestration": "Linear | Conditional | Branching | Looping（可加括號說明）",
+  "why": "兩三句話說明這樣編排的理由，以及這組模組有沒有哪裡怪怪的。"
+}}
+```
+"""
+
+
+async def write_policy(modules: list[str], builtin: list[str], note: str = "") -> dict:
+    """使用者拖完模組，agent 補上 policy。
+
+    這是拖拉式組裝的關鍵一步 —— 拖拉只給你「有哪些模組」，
+    真正決定行為的是 policy。少了這一步，拖出來的每個架構跑起來都一樣。
+    """
+    from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
+
+    known = {**MODULES, **BUILTIN_TOOLS}
+    picked = "\n".join(
+        f"- `{n}`（{known[n]['stage']}）{known[n]['description'].split('。')[0]}。"
+        for n in modules + builtin if n in known
+    ) or "（沒選任何模組）"
+
+    prompt = (note.strip() or "照這組模組寫一份 policy。") + "\n\n（只輸出 JSON code block。）"
+    out = []
+    async for msg in query(
+        prompt=prompt,
+        options=ClaudeAgentOptions(
+            tools=[], setting_sources=[],
+            system_prompt=POLICY_SYSTEM.format(picked=picked), max_turns=1,
+        ),
+    ):
+        if isinstance(msg, AssistantMessage):
+            out += [b.text for b in msg.content if isinstance(b, TextBlock)]
+
+    reply = "\n".join(out).strip()
+    for m in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", reply, re.S):
+        try:
+            got = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            continue
+        if "policy" in got:
+            return got
+    return {"policy": reply, "orchestration": "", "why": ""}
+
+
 def validate(spec: dict) -> tuple[bool, str]:
     """存之前檢查一遍 —— agent 有時會發明不存在的模組。"""
     if not str(spec.get("name", "")).strip():

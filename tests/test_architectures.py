@@ -76,3 +76,11 @@ def test_unknown_module_is_rejected_not_crashed(ix):
     result = M.run_module("nope", {}, ix)
 
     assert "error" in result and "nope" in result["error"]
+
+
+def test_every_module_has_a_stage_and_description():
+    """組裝台從 /api/pipeline 拿階段來分車道，architect.write_policy 也靠 stage 描述模組。
+    少一個 stage，前端就會有個拖不進任何車道的孤兒 chip、後端會 KeyError。"""
+    for name, mod in {**M.MODULES, **M.BUILTIN_TOOLS}.items():
+        assert mod.get("stage") in M.STAGE_ORDER, f"{name} 的 stage 不對：{mod.get('stage')}"
+        assert mod.get("description", "").strip(), f"{name} 沒有描述"

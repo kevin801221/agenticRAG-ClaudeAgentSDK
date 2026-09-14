@@ -23,7 +23,7 @@ load_dotenv()
 import architect  # noqa: E402
 import traces  # noqa: E402
 from engines import check_config, describe_engine, get_engine  # noqa: E402
-from modules import ARCHITECTURES, BUILTIN_TOOLS, MODULES  # noqa: E402
+from modules import ARCHITECTURES, BUILTIN_TOOLS, MODULES, STAGE_ORDER  # noqa: E402
 from retrieval import load_index  # noqa: E402
 
 # 使用者自己組的架構跟內建的平起平坐 —— 它們是同一種東西（一份 Architecture）
@@ -97,9 +97,6 @@ def _corpus_pdf(path: str) -> Path:
 async def pdf(path: str) -> FileResponse:
     """原始 PDF 檔（給「在新分頁開啟」用）。"""
     return FileResponse(_corpus_pdf(path), media_type="application/pdf")
-
-
-STAGE_ORDER = ["Indexing", "Pre-retrieval", "Retrieval", "Post-retrieval"]
 
 
 @app.get("/api/pipeline")
@@ -466,6 +463,16 @@ async def architect_turn(body: dict = Body(...)) -> dict:
     if len(history) > 40:
         raise HTTPException(400, "對話太長了，重新開一輪比較有效率")
     return await architect.turn(history)
+
+
+@app.post("/api/architect/policy")
+async def architect_policy(body: dict = Body(...)) -> dict:
+    """自己拖完模組，讓 agent 把 policy 補上 —— 拖拉只決定有哪些模組。"""
+    mods = [m for m in (body.get("modules") or []) if m in MODULES]
+    builtin = [b for b in (body.get("builtin_tools") or []) if b in BUILTIN_TOOLS]
+    if not mods:
+        raise HTTPException(400, "至少要選一個模組")
+    return await architect.write_policy(mods, builtin, str(body.get("note") or ""))
 
 
 @app.post("/api/architect/save")
