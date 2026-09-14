@@ -1,0 +1,32 @@
+[project]
+name = "agentic-rag"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.2.152",
+    "fastapi>=0.141.1",
+    "jieba>=0.42.1",
+    "litellm>=1.100.1",
+    "numpy>=2.5.3",
+    "python-dotenv>=1.2.3",
+    "rank-bm25>=0.2.2",
+    "uvicorn>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+    "nbclient>=0.11.0",
+    "pytest>=9.1.1",
+]
+
+[project.optional-dependencies]
+embeddings = ["sentence-transformers>=3.0", "torch>=2.2"]
+chroma = [
+    "chromadb>=1.5.9",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["ignore:invalid escape sequence:SyntaxWarning"]  # jieba 自己的原始碼

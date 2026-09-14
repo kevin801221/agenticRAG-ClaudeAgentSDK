@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic RAG · 決策軌跡</title>
+<style>
+  :root{
+    --ground:#151B2B; --panel:#1E2639; --panel-2:#232C42; --rail:#33405C;
+    --ink:#EEF1F8; --muted:#8B96B3;
+    --signal:#F2B441;      /* 鈉燈琥珀：正在動作 */
+    --alert:#FF7A6B;       /* 折返：檢索不合格，重來 */
+    --ok:#6FD3A8;          /* 跑過了 / 有出處支撐 */
+    --ext:#8FA8FF;         /* SDK 內建工具：不是這個專案寫的 */
+    --mono:"Menlo","SF Mono",ui-monospace,monospace;
+    --sans:"Avenir Next","Helvetica Neue",-apple-system,"PingFang TC","Noto Sans TC",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:var(--sans);font-size:16px;line-height:1.65;
+    display:flex;flex-direction:column;
+  }
+  a{color:var(--signal)}
+
+  /* ── 狀態列 ───────────────────────────── */
+  header{
+    display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;
+    padding:.8rem 1.5rem;border-bottom:1px solid var(--rail);background:var(--panel);
+  }
+  header h1{font-size:1.05rem;margin:0;letter-spacing:.02em;font-weight:600}
+  header .sub{color:var(--muted);font-size:.85rem}
+  header .spacer{flex:1}
+  .badge{
+    font-family:var(--mono);font-size:.78rem;padding:.2rem .6rem;
+    border:1px solid var(--rail);border-radius:3px;color:var(--muted);white-space:nowrap;
+  }
+  .badge.live{border-color:var(--signal);color:var(--signal)}
+  .badge.warn{border-color:var(--alert);color:var(--alert)}
+
+  /* ── 流程圖 ──────────────────────────── */
+  .pipe{
+    border-bottom:1px solid var(--rail);background:var(--panel);
+    padding:.4rem 1rem .2rem;overflow-x:auto;
+  }
+  .pipe svg{display:block;width:100%;min-width:760px;height:auto}
+
+  .stage-label{font:600 11px var(--sans);fill:var(--muted);letter-spacing:.08em}
+  .stage-band{fill:var(--panel-2);opacity:0;transition:opacity .3s}
+  .stage-band.hot{opacity:.55}
+
+  .nbox{fill:var(--panel-2);stroke:var(--rail);stroke-width:1.5;transition:stroke .25s,fill .25s}
+  .nlabel{font:600 12.5px var(--mono);fill:var(--ink);transition:fill .25s}
+  .nsub{font:10.5px var(--sans);fill:var(--muted)}
+  .nhalo{fill:none;stroke:var(--signal);stroke-width:2;opacity:0;
+         transform-box:fill-box;transform-origin:center}
+  .ncount{font:700 10px var(--mono);fill:var(--ground)}
+  .ncountbg{fill:var(--ok);opacity:0;transform-box:fill-box;transform-origin:center}
+
+  /* 這個架構沒給的模組：灰掉。選 Naive RAG，整個 Post-retrieval 欄會暗掉 */
+  .node{opacity:1;transition:opacity .3s}
+  .node.off{opacity:.2}
+  .node.off .nbox{stroke-dasharray:4 4}
+
+  /* SDK 內建工具用不同顏色，學生要分得出哪些是自己寫的 */
+  .node.builtin .nbox{stroke:var(--ext)}
+  .node.builtin .nsub{fill:var(--ext)}
+  .ntag{font:700 8.5px var(--mono);fill:var(--ext);letter-spacing:.06em}
+
+  .node.done .nbox{stroke:var(--ok)}
+  .node.done .ncountbg{opacity:1}
+  .node.active .nbox{stroke:var(--signal);fill:#3A3320;stroke-dasharray:5 4}
+  .node.active .nlabel{fill:var(--signal)}
+
+  .spine{stroke:var(--rail);stroke-width:1.5;fill:none;opacity:.5}
+  .chev{fill:var(--rail);opacity:.6}
+
+  .dot{fill:var(--signal);filter:drop-shadow(0 0 7px var(--signal));opacity:0}
+  .trail{fill:none;stroke:var(--signal);stroke-width:2.5;opacity:0;stroke-linecap:round}
+  .loop{fill:none;stroke:var(--alert);stroke-width:2.5;opacity:0;stroke-linecap:round}
+  .looplabel{font:700 11px var(--sans);fill:var(--alert);opacity:0;text-anchor:middle}
+
+  @media (prefers-reduced-motion:no-preference){
+    .node.active .nbox{animation:march 1s linear infinite}
+    .node.active .nhalo{animation:halo 1.4s ease-out infinite}
+    .node.pop .ncountbg{animation:pop .45s ease-out}
+    .dot.fly{animation:fly .7s ease-in-out}
+    .trail.fly{animation:trail .9s ease-out}
+    .loop.fire{animation:loopfire 1.7s ease-out}
+    .looplabel.fire{animation:labelfire 1.7s ease-out}
+    @keyframes march{to{stroke-dashoffset:-36}}
+    @keyframes halo{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(1.15)}}
+    @keyframes pop{0%{transform:scale(.3)}55%{transform:scale(1.3)}100%{transform:scale(1)}}
+    @keyframes fly{0%{opacity:0}12%{opacity:1}88%{opacity:1}100%{opacity:0}}
+    @keyframes trail{0%{opacity:0;stroke-dashoffset:var(--len)}20%{opacity:.9}
+                     100%{opacity:0;stroke-dashoffset:0}}
+    @keyframes loopfire{0%{opacity:0;stroke-dashoffset:var(--len)}15%{opacity:1}
+                        70%{opacity:1;stroke-dashoffset:0}100%{opacity:0;stroke-dashoffset:0}}
+    @keyframes labelfire{0%{opacity:0}20%{opacity:1}75%{opacity:1}100%{opacity:0}}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .node.active .nhalo{opacity:.5}
+  }
+
+  /* ── 主要兩欄：軌跡比對話寬，因為過程才是主角 ── */
+  main{flex:1;display:grid;grid-template-columns:minmax(0,4fr) minmax(0,6fr);min-height:0}
+  .col{padding:1.25rem 1.5rem;overflow-y:auto;min-height:0}
+  .col.ask{border-right:1px solid var(--rail)}
+
+  .lede{color:var(--muted);margin:0 0 1rem;max-width:46ch;font-size:.92rem}
+  form{display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.1rem}
+  .archpick{display:flex;align-items:center;gap:.6rem;font-size:.85rem;color:var(--muted)}
+  select{
+    flex:1;padding:.4rem .55rem;background:var(--panel);color:var(--ink);
+    border:1px solid var(--rail);border-radius:4px;font:inherit;font-size:.9rem;
+  }
+  .archinfo{font-size:.8rem;color:var(--muted);line-height:1.5}
+  .archinfo code{font-family:var(--mono);font-size:.92em;color:var(--signal)}
+  textarea{
+    width:100%;min-height:4.5rem;resize:vertical;padding:.7rem .8rem;
+    background:var(--panel);color:var(--ink);border:1px solid var(--rail);
+    border-radius:4px;font:inherit;
+  }
+  textarea:focus-visible,button:focus-visible,select:focus-visible,.chip:focus-visible,summary:focus-visible{
+    outline:2px solid var(--signal);outline-offset:2px;
+  }
+  button{
+    align-self:flex-start;padding:.45rem 1.4rem;border:0;border-radius:4px;
+    background:var(--signal);color:#1B1405;font:inherit;font-weight:600;cursor:pointer;
+  }
+  button[disabled]{background:var(--rail);color:var(--muted);cursor:not-allowed}
+  .examples{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.4rem}
+  .chip{
+    font-size:.83rem;padding:.28rem .7rem;border:1px solid var(--rail);border-radius:999px;
+    background:none;color:var(--muted);cursor:pointer;font-family:inherit;font-weight:400;
+  }
+  .chip:hover{border-color:var(--signal);color:var(--ink)}
+
+  h2{font-size:.82rem;font-weight:600;color:var(--muted);margin:0 0 .9rem;letter-spacing:.06em}
+  .answer{font-size:1.02rem;white-space:pre-line}
+  .answer h3{font-size:1rem;margin:1.1rem 0 .3rem;color:var(--signal)}
+  .answer ul{margin:.3rem 0;padding-left:1.2rem}
+  .answer li{white-space:normal}
+  .answer code{font-family:var(--mono);font-size:.85em;background:var(--panel);padding:.1rem .3rem;border-radius:3px}
+  .answer pre{white-space:pre;margin:.6rem 0;border-radius:4px}
+  .answer pre code{background:none;padding:0}
+  .answer table{border-collapse:collapse;margin:.6rem 0;font-size:.9rem;white-space:normal;width:100%}
+  .answer th,.answer td{border:1px solid var(--rail);padding:.35rem .55rem;text-align:left;vertical-align:top}
+  .answer th{background:var(--panel);font-weight:600}
+  .answer:empty::after{content:"等一個問題。";color:var(--muted)}
+  .cite{
+    font-family:var(--mono);font-size:.78rem;padding:.05rem .35rem;margin:0 .1rem;
+    border-bottom:1px solid var(--ok);color:var(--ok);cursor:pointer;
+  }
+  .cite:hover{background:rgba(111,211,168,.12)}
+  .source-view{
+    margin-top:1rem;padding:.9rem 1rem;background:var(--panel);border-left:2px solid var(--ok);
+    border-radius:0 4px 4px 0;font-size:.9rem;
+  }
+  .source-view .path{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:.4rem}
+
+  /* ── 軌跡：導軌 + 編號（內容真的是序列） ────── */
+  .trace{position:relative;padding-left:2.1rem}
+  .trace::before{content:"";position:absolute;left:.72rem;top:.4rem;bottom:.4rem;width:2px;background:var(--rail)}
+  .trace:empty{padding-left:0}
+  .trace:empty::before{display:none}
+  .empty{color:var(--muted);max-width:44ch}
+
+  .node-card{position:relative;margin-bottom:1rem}
+  .node-card::before{
+    content:"";position:absolute;left:-1.78rem;top:.55rem;width:.78rem;height:.78rem;
+    border-radius:50%;background:var(--ground);border:2px solid var(--rail);
+  }
+  .node-card.act::before{border-color:var(--signal);background:var(--signal)}
+  .node-card.turn::before{border-color:var(--alert);background:var(--alert)}
+
+  .why{color:var(--ink);opacity:.88;font-size:.95rem;padding:.1rem 0 .2rem}
+  .card{background:var(--panel);border:1px solid var(--rail);border-radius:5px;overflow:hidden}
+  .card .head{display:flex;align-items:center;gap:.6rem;padding:.55rem .8rem;background:var(--panel-2)}
+  .card .n{font-family:var(--mono);font-size:.8rem;color:var(--signal)}
+  .card .tool{font-family:var(--mono);font-size:.9rem;font-weight:600}
+  .card .args{font-family:var(--mono);font-size:.78rem;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .card .out{padding:.55rem .8rem;font-size:.9rem;border-top:1px solid var(--rail)}
+  .card .out.bad{color:var(--alert)}
+  details{border-top:1px solid var(--rail)}
+  summary{padding:.45rem .8rem;font-size:.82rem;color:var(--muted);cursor:pointer;user-select:none}
+  summary:hover{color:var(--ink)}
+  pre{margin:0;padding:.8rem;background:#11162a;overflow-x:auto;
+    font-family:var(--mono);font-size:.78rem;line-height:1.55;color:#CBD3E6}
+
+  .pivot{
+    margin:.2rem 0 1rem;padding:.55rem .9rem;border-left:3px solid var(--alert);
+    background:rgba(255,122,107,.09);border-radius:0 4px 4px 0;font-size:.95rem;color:var(--alert);
+  }
+  .pivot strong{color:var(--ink);font-weight:600}
+
+  footer{border-top:1px solid var(--rail);background:var(--panel);padding:1rem 1.5rem}
+  footer > details > summary{padding:0;font-size:.9rem;color:var(--ink)}
+  .patterns{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:1rem}
+  .pat h3{margin:0 0 .25rem;font-size:.95rem}
+  .pat p{margin:0 0 .3rem;font-size:.86rem;color:var(--muted)}
+  .pat .where{font-family:var(--mono);font-size:.76rem;color:var(--signal)}
+
+  @media (max-width:900px){
+    main{grid-template-columns:1fr}
+    .col.ask{border-right:0;border-bottom:1px solid var(--rail)}
+    .col{overflow-y:visible}
+    body{height:auto}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Agentic RAG</h1>
+  <span class="sub">檢索策略由模型當場決定 —— 上面是流程，右邊是它的判斷理由</span>
+  <span class="spacer"></span>
+  <span class="badge" id="corpus">載入中</span>
+  <span class="badge" id="engine">—</span>
+</header>
+
+<section class="pipe"><svg id="pipe" role="img" aria-label="RAG 流程圖，執行中的模組會亮起"></svg></section>
+
+<main>
+  <section class="col ask">
+    <p class="lede">問一個關於 Claude Code 的問題。上面的流程圖會顯示它走到哪一步。</p>
+
+    <form id="form">
+      <label class="archpick"><span>架構</span><select id="arch"></select></label>
+      <div class="archinfo" id="archinfo"></div>
+      <textarea id="q" placeholder="例如：hook 要怎麼擋住寫入 .env？" required></textarea>
+      <button id="go" type="submit">問</button>
+    </form>
+
+    <div class="examples" id="examples"></div>
+
+    <h2>答案</h2>
+    <div class="answer" id="answer"></div>
+    <div id="sourceView"></div>
+  </section>
+
+  <section class="col">
+    <h2>決策軌跡</h2>
+    <div class="trace" id="trace"></div>
+    <p class="empty" id="empty">還沒開始。每次 agent 選一個做法、呼叫一個模組，上面會亮、這裡會長出一段。</p>
+  </section>
+</main>
+
+<footer>
+  <details>
+    <summary>架構圖書館 — 七種編排，同一組模組換不同政策</summary>
+    <div class="patterns" id="patterns"></div>
+  </details>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG = 'http://www.w3.org/2000/svg';
+const trace = $('trace'), answerEl = $('answer'), sourceView = $('sourceView');
+let ARCHS = [], STAGES = [], NODES = {}, lastNode = null, lastTool = null, FLOOR = 0;
+
+const EXAMPLES = [
+  'hook 要怎麼擋住寫入 .env？',
+  '那個會擋東西的功能怎麼設？',          // 刻意口語 -> 逼 agent 換術語
+  'sub-agent 跟 agent team 差在哪？',
+  '為什麼 allowed_tools 擋不住內建工具？',
+  '2026 年溫布頓男單冠軍是誰？',          // 知識庫外 -> CRAG 會走 WebSearch
+];
+
+/* ══════════ 流程圖 ══════════ */
+
+const W = 1200, HEAD = 30, TOP = 52, NH = 40, NGAP = 13;
+
+function buildPipe(stages) {
+  // 最後一欄是「生成答案」—— 它不是模組，但學生需要看到流程的終點
+  STAGES = [...stages, { stage: 'Generation', modules: [{ name: 'answer', description: '產生答案' }] }];
+
+  const cols = STAGES.length, colW = W / cols;
+  const maxRows = Math.max(...STAGES.map(s => s.modules.length));
+  const H = TOP + maxRows * (NH + NGAP) + 58;
+  FLOOR = TOP + maxRows * (NH + NGAP) + 14;   // 折返弧線走這條底線，不會穿過任何節點
+
+  const svg = $('pipe');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.innerHTML = '';
+  NODES = {};
+
+  const add = (tag, attrs, parent) => {
+    const el = document.createElementNS(SVG, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(el);
+    return el;
+  };
+
+  const midY = TOP + (maxRows * (NH + NGAP)) / 2 - NGAP / 2;
+
+  STAGES.forEach((st, c) => {
+    const x = c * colW;
+    add('rect', { class: 'stage-band', id: 'band-' + c, x: x + 6, y: HEAD - 16,
+                  width: colW - 12, height: H - HEAD + 8, rx: 8 });
+    add('text', { class: 'stage-label', x: x + 18, y: HEAD }).textContent = st.stage.toUpperCase();
+
+    if (c < STAGES.length - 1) {
+      add('path', { class: 'spine', d: 'M ' + (x + colW - 16) + ' ' + midY + ' L ' + (x + colW + 4) + ' ' + midY });
+      add('path', { class: 'chev', d: 'M ' + (x + colW + 3) + ' ' + (midY - 4) + ' l 7 4 l -7 4 z' });
+    }
+
+    st.modules.forEach((m, r) => {
+      const nx = x + 18, ny = TOP + r * (NH + NGAP), nw = colW - 36;
+      const g = add('g', { class: 'node' + (m.builtin ? ' builtin' : ''), id: 'n-' + m.name });
+      add('rect', { class: 'nhalo', x: nx - 3, y: ny - 3, width: nw + 6, height: NH + 6, rx: 7 }, g);
+      add('rect', { class: 'nbox', x: nx, y: ny, width: nw, height: NH, rx: 6 }, g);
+      add('text', { class: 'nlabel', x: nx + 11, y: ny + 17 }, g).textContent = m.name;
+      const sub = add('text', { class: 'nsub', x: nx + 11, y: ny + 31 }, g);
+      sub.textContent = (m.description || '').slice(0, Math.floor(nw / 12));
+      if (m.builtin) add('text', { class: 'ntag', x: nx + nw - 30, y: ny + 35 }, g).textContent = 'SDK';
+      add('circle', { class: 'ncountbg', cx: nx + nw - 15, cy: ny + 15, r: 9 }, g);
+      const cnt = add('text', { class: 'ncount', x: nx + nw - 15, y: ny + 18.5, 'text-anchor': 'middle' }, g);
+      NODES[m.name] = { g: g, cnt: cnt, runs: 0, col: c,
+                        cx: nx + nw / 2, cy: ny + NH / 2,
+                        left: nx, right: nx + nw, bottom: ny + NH };
+    });
+  });
+
+  // 動畫圖層放最後，才會蓋在節點上方
+  add('path', { class: 'trail', id: 'trail', d: '' });
+  add('path', { class: 'loop', id: 'loop', d: '' });
+  add('text', { class: 'looplabel', id: 'looplabel', x: 0, y: 0 }).textContent = '折返 · 重查';
+  add('path', { id: 'flowpath', fill: 'none', stroke: 'none', d: '' });
+  const dot = add('circle', { class: 'dot', id: 'dot', r: 5.5 });
+  const anim = document.createElementNS(SVG, 'animateMotion');
+  anim.setAttribute('id', 'flowanim');
+  anim.setAttribute('dur', '0.7s');
+  anim.setAttribute('begin', 'indefinite');
+  const mp = document.createElementNS(SVG, 'mpath');
+  mp.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#flowpath');
+  mp.setAttribute('href', '#flowpath');
+  anim.appendChild(mp);
+  dot.appendChild(anim);
+}
+
+function paintArchitecture(arch) {
+  const allowed = {};
+  (arch ? arch.modules.concat(arch.builtin_tools || []) : []).concat(['answer'])
+    .forEach(m => { allowed[m] = 1; });
+  for (const name in NODES) NODES[name].g.classList.toggle('off', !allowed[name]);
+}
+
+function resetPipe() {
+  for (const name in NODES) {
+    const n = NODES[name];
+    n.g.classList.remove('active', 'done', 'pop');
+    n.runs = 0;
+    n.cnt.textContent = '';
+  }
+  lastNode = null; lastTool = null;
+  ['trail', 'loop', 'looplabel'].forEach(id => $(id).classList.remove('fly', 'fire'));
+  STAGES.forEach((_, c) => $('band-' + c).classList.remove('hot'));
+}
+
+function restart(el, cls) {          // 重新觸發 CSS 動畫
+  el.classList.remove(cls);
+  void el.getBoundingClientRect();
+  el.classList.add(cls);
+}
+
+function activate(name) {
+  const n = NODES[name];
+  if (!n) return;
+  if (lastNode && lastNode !== n) lastNode.g.classList.remove('active');
+  if (lastNode) flow(lastNode, n);
+
+  n.g.classList.add('active', 'done');
+  n.runs += 1;
+  n.cnt.textContent = n.runs;
+  restart(n.g, 'pop');
+  STAGES.forEach((_, c) => $('band-' + c).classList.toggle('hot', c === n.col));
+  lastNode = n;
+}
+
+/** 從 a 飛到 b。三種情況：
+ *   同一個模組再跑一次 → 不畫線，只重新脈動
+ *   同一階段換模組     → 短弧線（正常前進，不是折返）
+ *   真的退回前面的階段 → 大迴圈 + 紅色「折返」標籤 ← CRAG 自我修正的視覺高潮
+ */
+function flow(a, b) {
+  if (a === b) return;
+  const back = b.col < a.col;
+  const sameCol = b.col === a.col;
+  const d = back
+    ? 'M ' + a.cx + ' ' + a.bottom + ' C ' + a.cx + ' ' + FLOOR + ', '
+        + b.cx + ' ' + FLOOR + ', ' + b.cx + ' ' + b.bottom
+    : sameCol
+    ? 'M ' + a.right + ' ' + a.cy + ' C ' + (a.right + 20) + ' ' + a.cy + ', '
+        + (b.right + 20) + ' ' + b.cy + ', ' + b.right + ' ' + b.cy
+    : 'M ' + a.right + ' ' + a.cy + ' C ' + ((a.right + b.left) / 2) + ' ' + a.cy + ', '
+        + ((a.right + b.left) / 2) + ' ' + b.cy + ', ' + b.left + ' ' + b.cy;
+
+  $('flowpath').setAttribute('d', d);
+  const anim = $('flowanim');
+  if (anim && anim.beginElement) { try { anim.beginElement(); } catch (e) {} }
+  restart($('dot'), 'fly');
+
+  const line = back ? $('loop') : $('trail');
+  line.setAttribute('d', d);
+  const len = line.getTotalLength ? line.getTotalLength() : 320;
+  line.style.setProperty('--len', len);
+  line.style.strokeDasharray = len;
+  restart(line, back ? 'fire' : 'fly');
+
+  if (back) {
+    const lab = $('looplabel');
+    lab.setAttribute('x', (a.cx + b.cx) / 2);
+    lab.setAttribute('y', FLOOR + 16);
+    restart(lab, 'fire');
+  }
+}
+
+function finishPipe() {
+  activate('answer');
+  const n = NODES['answer'];
+  if (n) setTimeout(() => n.g.classList.remove('active'), 1400);
+}
+
+/* ══════════ 載入 ══════════ */
+
+EXAMPLES.forEach(text => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.type = 'button'; b.textContent = text;
+  b.onclick = () => { $('q').value = text; $('form').requestSubmit(); };
+  $('examples').appendChild(b);
+});
+
+fetch('/api/health').then(r => r.json()).then(h => {
+  $('corpus').textContent = h.chunks + ' 片段 · ' + h.files + ' 檔案 · ' + h.vector_store;
+  const e = $('engine');
+  e.textContent = h.engine_label;
+  e.className = 'badge live';
+  if (!h.has_vectors) {
+    const w = document.createElement('span');
+    w.className = 'badge warn';
+    w.textContent = '降級：純 BM25，無向量';
+    e.after(w);
+  }
+});
+
+Promise.all([
+  fetch('/api/pipeline').then(r => r.json()),
+  fetch('/api/architectures').then(r => r.json()),
+]).then(function (res) {
+  buildPipe(res[0]);
+  ARCHS = res[1];
+
+  $('arch').innerHTML = ARCHS.map(a =>
+    '<option value="' + a.key + '"' + (a.key === 'crag' ? ' selected' : '') + '>' + esc(a.name) + '</option>').join('');
+  $('arch').onchange = showArch;
+  showArch();
+
+  $('patterns').innerHTML = ARCHS.map(a =>
+    '<div class="pat"><h3>' + esc(a.name) + '</h3>' +
+    '<p>' + esc(a.orchestration) + ' · ' + esc(a.paper) + '</p>' +
+    '<div class="where">' + a.modules.map(esc).join(' · ') + '</div></div>').join('');
+});
+
+function showArch() {
+  const a = ARCHS.filter(x => x.key === $('arch').value)[0];
+  if (!a) return;
+  paintArchitecture(a);
+  $('archinfo').innerHTML =
+    esc(a.orchestration) + '　模組：<code>' +
+    a.modules.concat(a.builtin_tools || []).map(esc).join('</code> <code>') + '</code>';
+}
+
+/* ══════════ 問答 ══════════ */
+
+$('form').onsubmit = ev => { ev.preventDefault(); ask($('q').value.trim()); };
+
+function ask(question) {
+  if (!question) return;
+  trace.innerHTML = '';
+  answerEl.textContent = '';
+  sourceView.innerHTML = '';
+  $('empty').style.display = 'none';
+  $('go').disabled = true;
+  $('go').textContent = '思考中…';
+  resetPipe();
+
+  const es = new EventSource('/api/ask?q=' + encodeURIComponent(question)
+                             + '&arch=' + encodeURIComponent($('arch').value));
+  es.onmessage = m => handle(JSON.parse(m.data), es);
+  es.onerror = () => finish(es);
+}
+
+function finish(es) {
+  es.close();
+  $('go').disabled = false;
+  $('go').textContent = '問';
+}
+
+function handle(ev, es) {
+  if (ev.type === 'status' || ev.type === 'reasoning')
+    return card('think', '<div class="why">' + esc(ev.text) + '</div>');
+
+  if (ev.type === 'tool_call') {
+    // 上一步在評分、這一步又去查 —— 這就是自我修正，流程圖會畫出折返
+    if (lastTool === 'grade_documents' && ev.tool.indexOf('search') >= 0) {
+      const p = document.createElement('div');
+      p.className = 'pivot';
+      p.innerHTML = '<strong>折返</strong> — 上一輪檢索被自己判定不合格，換個查法重來。';
+      trace.appendChild(p);
+    }
+    activate(ev.tool);
+    lastTool = ev.tool;
+    return card('act',
+      '<div class="card"><div class="head">' +
+        '<span class="n">' + ev.step + '</span>' +
+        '<span class="tool">' + esc(ev.tool) + '</span>' +
+        '<span class="args">' + esc(JSON.stringify(ev.args)) + '</span>' +
+      '</div>' +
+      '<div class="out" id="out-' + ev.step + '">執行中…</div>' +
+      '<details><summary>看這個模組的程式碼</summary><pre>' + esc(ev.source || '') + '</pre></details></div>');
+  }
+
+  if (ev.type === 'tool_result') {
+    const out = $('out-' + ev.step);
+    if (out) {
+      out.textContent = ev.summary;
+      out.className = 'out' + (/失敗|^0 筆/.test(ev.summary) ? ' bad' : '');
+    }
+    return;
+  }
+
+  if (ev.type === 'answer') { finishPipe(); return renderAnswer(ev.text); }
+
+  if (ev.type === 'error') {
+    card('turn', '<div class="pivot"><strong>錯誤</strong> — ' + esc(ev.text) + '</div>');
+    if (ev.fatal) finish(es);
+    return;
+  }
+
+  if (ev.type === 'done') {
+    card('think', '<div class="why">完成：' + esc(ev.architecture || '') + ' · ' + ev.turns +
+                  ' 次模組呼叫 · ' + (ev.elapsed_ms / 1000).toFixed(1) + ' 秒</div>');
+    finish(es);
+  }
+}
+
+// 答案裡的 [某檔案.md#12] 轉成可點的出處
+function renderAnswer(text) {
+  answerEl.innerHTML = md(text).replace(/\[([^\[\]\s]+#\d+)\]/g,
+    (_, id) => '<span class="cite" data-id="' + id + '" role="button" tabindex="0">' + id + '</span>');
+  answerEl.querySelectorAll('.cite').forEach(el => {
+    const show = () => showSource(el.dataset.id);
+    el.onclick = show;
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); } };
+  });
+}
+
+function showSource(id) {
+  fetch('/api/chunk?id=' + encodeURIComponent(id))
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(c => {
+      sourceView.innerHTML = '<div class="source-view"><div class="path">' +
+        esc(c.path) + ' — ' + esc(c.heading) + '</div>' + esc(c.text) + '</div>';
+    })
+    .catch(() => {
+      sourceView.innerHTML = '<div class="source-view"><div class="path">找不到片段 ' + esc(id) +
+        '</div>模型引用了不存在的 id —— 這正是要提醒學生檢查的地方。</div>';
+    });
+}
+
+// 最小 markdown 渲染：只做答案裡真的會出現的那幾種語法。不拉函式庫是刻意的 —— 教室可能沒網路。
+function md(src) {
+  const fences = [];
+  const t = esc(src).replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    fences.push('<pre>' + code.replace(/\n$/, '') + '</pre>');
+    return '@@FENCE' + (fences.length - 1) + '@@';
+  });
+
+  const out = [];
+  let table = null;
+  const flushTable = () => {
+    if (!table) return;
+    const head = table[0], body = table.slice(1);
+    out.push('<table><thead><tr>' + head.map(c => '<th>' + c + '</th>').join('') +
+      '</tr></thead><tbody>' +
+      body.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table>');
+    table = null;
+  };
+
+  t.split('\n').forEach(raw => {
+    const line = raw.trimEnd();
+    if (/^\|.*\|$/.test(line)) {
+      if (/^[\s|:-]+$/.test(line)) return;
+      if (!table) table = [];
+      table.push(line.slice(1, -1).split('|').map(c => c.trim()));
+      return;
+    }
+    flushTable();
+    if (!line) { out.push(''); return; }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { out.push('<h3>' + h[2] + '</h3>'); return; }
+    const li = line.match(/^\s*[-*]\s+(.*)$/);
+    if (li) { out.push('<li>' + li[1] + '</li>'); return; }
+    out.push(line);
+  });
+  flushTable();
+
+  return out.join('\n')
+    .replace(/(<li>[\s\S]*?<\/li>)(?!\n<li>)/g, '<ul>$1</ul>')
+    .replace(/\n+(<(?:h3|ul|pre|table)[\s>])/g, '$1')
+    .replace(/(<\/(?:h3|ul|pre|table)>)\n+/g, '$1')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/@@FENCE(\d+)@@/g, (_, i) => fences[i]);
+}
+
+function card(kind, html) {
+  const d = document.createElement('div');
+  d.className = 'node-card ' + kind;
+  d.innerHTML = html;
+  trace.appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+</script>
+</body>
+</html>
