@@ -219,6 +219,21 @@
 
   footer{border-top:1px solid var(--rail);background:var(--panel);padding:1rem 1.5rem}
   footer > details > summary{padding:0;font-size:.9rem;color:var(--ink)}
+  .corpus{display:grid;gap:.35rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.8rem}
+  .cfile{
+    display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;
+    background:none;border:1px solid var(--rail);border-radius:4px;
+    color:var(--ink);font:inherit;font-size:.85rem;text-align:left;cursor:pointer;
+  }
+  .cfile:hover{border-color:var(--signal)}
+  .cfile .kind{font-family:var(--mono);font-size:.68rem;padding:.05rem .3rem;border-radius:2px;
+    border:1px solid currentColor;flex-shrink:0}
+  .cfile.pdf .kind{color:var(--ext)}
+  .cfile.md .kind{color:var(--muted)}
+  .cfile .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cfile .n{font-family:var(--mono);font-size:.72rem;color:var(--muted);flex-shrink:0}
+  footer > details + details{margin-top:.7rem}
+
   .patterns{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:1rem}
   .pat h3{margin:0 0 .25rem;font-size:.95rem}
   .pat p{margin:0 0 .3rem;font-size:.86rem;color:var(--muted)}
@@ -280,7 +295,11 @@
 
 <footer>
   <details>
-    <summary>架構圖書館 — 七種編排，同一組模組換不同政策</summary>
+    <summary>語料庫 — 點檔名直接看，PDF 會開閱讀器</summary>
+    <div class="corpus" id="corpusList"></div>
+  </details>
+  <details>
+    <summary>架構圖書館 — 同一組模組，換不同政策</summary>
     <div class="patterns" id="patterns"></div>
   </details>
 </footer>
@@ -631,24 +650,51 @@ function renderAnswer(text) {
   });
 }
 
+fetch('/api/corpus').then(r => r.json()).then(list => {
+  $('corpusList').innerHTML = list.map(f =>
+    '<button class="cfile ' + (f.is_pdf ? 'pdf' : 'md') + '" type="button" data-path="' + esc(f.path) + '">' +
+      '<span class="kind">' + (f.is_pdf ? 'PDF' : 'MD') + '</span>' +
+      '<span class="nm">' + esc(f.path.replace(/^papers\//, '')) + '</span>' +
+      '<span class="n">' + (f.is_pdf ? f.pages + ' 頁' : f.chunks + ' 段') + '</span>' +
+    '</button>').join('');
+
+  $('corpusList').querySelectorAll('.cfile').forEach(b => {
+    b.onclick = () => {
+      const path = b.dataset.path;
+      if (b.classList.contains('pdf')) {
+        renderSource({ path: path, page: 1, is_pdf: true, text: '', heading: '' });
+      } else {
+        // markdown 沒有閱讀器，就把第一段叫出來當入口
+        showSource(path + '#0');
+      }
+      document.querySelector('.col.ask').scrollTo({ top: 1e6, behavior: 'smooth' });
+    };
+  });
+});
+
+/** 把一個片段（或一整份 PDF）畫進出處面板。showSource 與語料瀏覽器共用。 */
+function renderSource(c) {
+  const rel = c.path.replace(/^corpus\//, '');
+  const viewer = c.is_pdf
+    ? '<iframe class="pdfview" title="' + esc(c.path) + ' 第 ' + c.page + ' 頁" src="/api/pdf?path=' +
+      encodeURIComponent(rel) + '#page=' + c.page + '&zoom=page-width"></iframe>' +
+      '<a class="pdflink" target="_blank" rel="noopener" href="/api/pdf?path=' +
+      encodeURIComponent(rel) + '#page=' + c.page + '">在新分頁開啟第 ' + c.page + ' 頁 ↗</a>' +
+      (c.text
+        ? '<details><summary>抽出來的純文字（檢索實際比對的內容）</summary><pre>' +
+          esc(c.text) + '</pre></details>'
+        : '')
+    : esc(c.text);
+  const where = c.page
+    ? esc(c.path) + ' — 第 ' + c.page + ' 頁'
+    : esc(c.path) + (c.heading ? ' — ' + esc(c.heading) : '');
+  sourceView.innerHTML = '<div class="source-view"><div class="path">' + where + '</div>' + viewer + '</div>';
+}
+
 function showSource(id) {
   fetch('/api/chunk?id=' + encodeURIComponent(id))
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(c => {
-      // 論文的引用要能翻回原文那一頁 —— 光看抽出來的文字沒辦法核對圖表
-      const viewer = c.is_pdf && c.page
-        ? '<iframe class="pdfview" title="' + esc(c.path) + ' 第 ' + c.page + ' 頁" src="/api/pdf?path=' +
-          encodeURIComponent(c.path.replace(/^corpus\//, '')) + '#page=' + c.page +
-          '&zoom=page-width"></iframe>' +
-          '<a class="pdflink" target="_blank" rel="noopener" href="/api/pdf?path=' +
-          encodeURIComponent(c.path.replace(/^corpus\//, '')) + '#page=' + c.page +
-          '">在新分頁開啟第 ' + c.page + ' 頁 ↗</a>' +
-          '<details><summary>抽出來的純文字（檢索實際比對的內容）</summary><pre>' +
-          esc(c.text) + '</pre></details>'
-        : esc(c.text);
-      const where = c.page ? esc(c.path) + ' — 第 ' + c.page + ' 頁' : esc(c.path) + ' — ' + esc(c.heading);
-      sourceView.innerHTML = '<div class="source-view"><div class="path">' + where + '</div>' + viewer + '</div>';
-    })
+    .then(renderSource)
     .catch(() => {
       sourceView.innerHTML = '<div class="source-view"><div class="path">找不到片段 ' + esc(id) +
         '</div>模型引用了不存在的 id —— 這正是要提醒學生檢查的地方。</div>';

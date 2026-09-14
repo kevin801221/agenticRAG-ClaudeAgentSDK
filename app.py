@@ -108,6 +108,23 @@ async def pipeline() -> list[dict]:
     return [{"stage": s, "modules": grouped[s]} for s in STAGE_ORDER]
 
 
+@app.get("/api/corpus")
+async def corpus() -> list[dict]:
+    """語料清單，給前端做瀏覽器用。
+
+    不用先問問題就能直接翻論文 —— 只靠「答案引用到才點得開」對讀論文太不方便。
+    """
+    files: dict[str, dict] = {}
+    for c in INDEX.chunks:
+        f = files.setdefault(
+            c.path, {"path": c.path, "chunks": 0, "pages": 0, "is_pdf": c.path.lower().endswith(".pdf")}
+        )
+        f["chunks"] += 1
+        if c.page:
+            f["pages"] = max(f["pages"], c.page)
+    return sorted(files.values(), key=lambda f: (not f["is_pdf"], f["path"]))
+
+
 @app.get("/api/architectures")
 async def architectures() -> list[dict]:
     """七個現成架構。前端做成選單，學生可以當場切換比較軌跡。"""
