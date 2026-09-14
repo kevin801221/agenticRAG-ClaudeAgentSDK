@@ -159,6 +159,10 @@
     border-radius:0 4px 4px 0;font-size:.9rem;
   }
   .source-view .path{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:.4rem}
+  .pdfview{width:100%;height:min(62vh,560px);border:1px solid var(--rail);border-radius:4px;background:#fff}
+  .pdflink{display:inline-block;margin-top:.5rem;font-size:.82rem}
+  .source-view details{border:0;margin-top:.5rem}
+  .source-view pre{white-space:pre-wrap;max-height:260px;overflow-y:auto}
 
   /* ── 軌跡：導軌 + 編號（內容真的是序列） ────── */
   .trace{position:relative;padding-left:2.1rem}
@@ -562,8 +566,19 @@ function showSource(id) {
   fetch('/api/chunk?id=' + encodeURIComponent(id))
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(c => {
-      sourceView.innerHTML = '<div class="source-view"><div class="path">' +
-        esc(c.path) + ' — ' + esc(c.heading) + '</div>' + esc(c.text) + '</div>';
+      // 論文的引用要能翻回原文那一頁 —— 光看抽出來的文字沒辦法核對圖表
+      const viewer = c.is_pdf && c.page
+        ? '<iframe class="pdfview" title="' + esc(c.path) + ' 第 ' + c.page + ' 頁" src="/api/pdf?path=' +
+          encodeURIComponent(c.path.replace(/^corpus\//, '')) + '#page=' + c.page +
+          '&zoom=page-width"></iframe>' +
+          '<a class="pdflink" target="_blank" rel="noopener" href="/api/pdf?path=' +
+          encodeURIComponent(c.path.replace(/^corpus\//, '')) + '#page=' + c.page +
+          '">在新分頁開啟第 ' + c.page + ' 頁 ↗</a>' +
+          '<details><summary>抽出來的純文字（檢索實際比對的內容）</summary><pre>' +
+          esc(c.text) + '</pre></details>'
+        : esc(c.text);
+      const where = c.page ? esc(c.path) + ' — 第 ' + c.page + ' 頁' : esc(c.path) + ' — ' + esc(c.heading);
+      sourceView.innerHTML = '<div class="source-view"><div class="path">' + where + '</div>' + viewer + '</div>';
     })
     .catch(() => {
       sourceView.innerHTML = '<div class="source-view"><div class="path">找不到片段 ' + esc(id) +

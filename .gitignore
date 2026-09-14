@@ -4,3 +4,6 @@ __pycache__/
 .env
 data/
 .pytest_cache/
+
+# 論文 PDF 不進 repo（別人的著作，各自有授權）—— 用 scripts/fetch_papers.sh 抓
+corpus/papers/

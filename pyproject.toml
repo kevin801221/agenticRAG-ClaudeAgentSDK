@@ -26,6 +26,9 @@ embeddings = ["sentence-transformers>=3.0", "torch>=2.2"]
 chroma = [
     "chromadb>=1.5.9",
 ]
+pdf = [
+    "pymupdf>=1.28.2",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

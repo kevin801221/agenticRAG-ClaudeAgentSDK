@@ -22,12 +22,13 @@ RRF_K = 60  # RRF 的平滑常數，論文預設值
 
 @dataclass
 class Chunk:
-    id: str  # "docs/walkthroughs/hook_walkthrough.md#7"
+    id: str  # "corpus/01-hooks.md#7" 或 "papers/crag.pdf#3"
     path: str
-    heading: str  # "Hooks 心智模型 > Phase 2 > PreToolUse 怎麼擋"
+    heading: str  # markdown 是 heading 路徑，PDF 是 "檔名 > p.3"
     text: str
     prev_id: str | None = None
     next_id: str | None = None
+    page: int | None = None  # 只有 PDF 有。讓引用可以跳到原文那一頁
 
 
 @dataclass

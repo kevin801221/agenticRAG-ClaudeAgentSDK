@@ -53,12 +53,36 @@ async def health() -> dict:
     }
 
 
+CORPUS_DIR = (HERE / "corpus").resolve()
+
+
 @app.get("/api/chunk")
 async def chunk(id: str) -> dict:
     c = INDEX.by_id.get(id)
     if c is None:
         raise HTTPException(404, f"沒有這個片段：{id}")
-    return {"chunk_id": c.id, "path": c.path, "heading": c.heading, "text": c.text}
+    return {
+        "chunk_id": c.id,
+        "path": c.path,
+        "heading": c.heading,
+        "text": c.text,
+        "page": c.page,          # 只有 PDF 有；前端拿它跳到原文那一頁
+        "is_pdf": c.path.lower().endswith(".pdf"),
+    }
+
+
+@app.get("/api/pdf")
+async def pdf(path: str) -> FileResponse:
+    """把語料裡的 PDF 交給瀏覽器內建的閱讀器顯示。
+
+    只開放 corpus/ 底下的 .pdf —— resolve 之後再比對父目錄，擋掉 ../ 這類路徑穿越。
+    """
+    if not path.lower().endswith(".pdf"):
+        raise HTTPException(400, "只提供 PDF")
+    target = (CORPUS_DIR / path).resolve()
+    if CORPUS_DIR not in target.parents or not target.is_file():
+        raise HTTPException(404, f"找不到 {path}")
+    return FileResponse(target, media_type="application/pdf")
 
 
 STAGE_ORDER = ["Indexing", "Pre-retrieval", "Retrieval", "Post-retrieval"]

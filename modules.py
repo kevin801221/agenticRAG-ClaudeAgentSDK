@@ -156,10 +156,11 @@ def grade_documents(ix: Index, question: str, chunk_ids: list[str]) -> dict:
             for cid in chunk_ids
         ],
         "next_step": (
-            "CRAG 的三個分支："
-            "多數 2 分 → CORRECT，直接作答；"
-            "混雜 1 分 → AMBIGUOUS，重寫 query 再查一輪後合併；"
-            "多數 0 分 → INCORRECT，知識庫沒有，改用外部來源或明講查不到。"
+            "CRAG（Yan et al. 2024）的三個分支，依整體信心度選一條："
+            "高信心 → CORRECT：不要整段照抄，先把這些內文拆成小段、丟掉無關的、"
+            "再重組成精煉的 knowledge strips，然後作答；"
+            "低信心 → INCORRECT：丟掉這些檢索結果，改用外部來源（論文用 web search）；"
+            "判斷不了 → AMBIGUOUS：兩者都用 —— 精煉後的內部知識 + 外部來源，合併後作答。"
         ),
     }
 
@@ -504,11 +505,15 @@ CRAG = Architecture(
 
 1. 先用 search 檢索**知識庫**。
 2. 用 grade_documents 取回完整內文，逐塊給 0-2 分。
-3. 依整體評分走分支：
-   - **CORRECT**（多數 2 分）→ 直接作答。
-   - **AMBIGUOUS**（混雜 1 分）→ 改寫 query 再檢索一輪，把兩輪結果合併後作答。
-     必要時用 expand 補上下文。
-   - **INCORRECT**（多數 0 分）→ 知識庫裡沒有這件事。這時**才**用 WebSearch 上網找。
+3. 依整體信心度走分支（照論文的定義，別搞混）：
+   - **CORRECT**（多數 2 分）→ **不要整段照抄**。先把內文拆成小段、丟掉跟問題無關的、
+     再重組成精煉的知識片段，然後作答。這一步叫 decompose-then-recompose，
+     是這篇論文最核心的貢獻 —— 因為就算文件相關，裡面也有大量無關段落。
+     片段被切斷就用 expand 補。
+   - **INCORRECT**（多數 0 分）→ **丟掉**這批檢索結果，改用 WebSearch 上網找。
+     論文的做法是把問題改寫成關鍵字查詢再送去搜尋。
+   - **AMBIGUOUS**（介於中間、判斷不了）→ **兩邊都用**：精煉後的內部知識
+     ＋ WebSearch 的外部結果，合併後作答。這是「不確定時不賭單邊」的保守做法。
 
 **WebSearch 的三條規矩**（很重要，這是可信度的分水嶺）：
 
@@ -717,6 +722,64 @@ SEARCH_O1 = Architecture(
     max_turns=18,
 )
 
+PAPER_SLIDES = Architecture(
+    name="論文重點 Slide",
+    paper="不是論文方法，是一個實用案例：把 PDF 讀成可直接上投影片的重點",
+    orchestration="Linear（定位 → 逐節精讀 → 產出投影片大綱）",
+    modules=["list_corpus", "search", "grade_documents", "expand"],
+    policy="""你的任務不是回答問題，是**把一篇論文整理成可以直接貼進投影片的重點**。
+
+## 流程
+
+1. **定位**：用 list_corpus 看知識庫裡有哪些 PDF，確認使用者指的是哪一篇。
+   名字對不上就問，不要猜。
+2. **抓骨架**：先檢索這篇的摘要與結論（query 用 abstract / conclusion / we propose 這類詞），
+   建立整體理解。
+3. **逐節精讀**：針對下面每一格分別檢索，並用 grade_documents 讀完整內文。
+   **不要只看檢索摘要就下筆** —— 論文的關鍵數字常常在被截斷的那半段。
+   片段被切斷就用 expand 往前後補。
+4. **產出**：照下面的格式輸出。
+
+## 輸出格式（嚴格照這個）
+
+### 一句話
+用一句話說完這篇在幹嘛。不要超過 40 字，不要用「本文提出一種基於…的方法」這種句型。
+
+### 它要解決的問題
+2-3 個 bullet。講清楚**沒有這篇之前，大家卡在哪裡**。
+
+### 方法：怎麼做的
+3-5 個 bullet，照執行順序寫。每個 bullet 要是**具體動作**，不是抽象名詞。
+
+- 壞例子：「引入了一個輕量級評估模組」
+- 好例子：「檢索完先用一個 T5-large 評估器給每份文件打分，分數落在三個區間走三條不同的路」
+
+### 關鍵數字
+表格。只放**能支撐主張的數字**，不要抄整張實驗表。
+
+| 指標 | 數字 | 對照組 |
+|---|---|---|
+
+沒有明確數字就寫「論文未給出可比較的數字」，不要編。
+
+### 限制與代價
+2-3 個 bullet。**這格最重要，也最多人略過。** 包含：
+額外的延遲或成本、需要訓練嗎、在什麼情況下會失效、作者自己承認的限制。
+
+### 一句可以講給學生聽的話
+一句話，白話、有記憶點、可以直接唸出來。
+
+## 兩條硬規則
+
+**每個 bullet 後面都要標頁碼**，格式 `[papers/檔名.pdf#片段編號]`。
+聽眾要能翻回原文對照，沒有出處的重點在投影片上沒有價值。
+
+**論文沒寫的不要寫。** 你對這篇的背景知識可能是對的，但那不是這篇的貢獻。
+只寫檢索得到、而且你讀過完整內文的內容。""",
+    max_turns=20,
+)
+
+
 ARCHITECTURES: dict[str, Architecture] = {
     # 基準線
     "naive": NAIVE,
@@ -734,8 +797,12 @@ ARCHITECTURES: dict[str, Architecture] = {
     "flare": FLARE,
     "search_o1": SEARCH_O1,
     "adaptive": ADAPTIVE,
+
+
     # 全部給你自己組
     "modular": MODULAR_DIY,
+    # 實用案例：讀 PDF 產投影片重點
+    "paper_slides": PAPER_SLIDES,
 }
 
 

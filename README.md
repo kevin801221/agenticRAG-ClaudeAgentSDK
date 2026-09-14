@@ -85,12 +85,13 @@ Agent SDK 底層 spawn 的是 Claude Code CLI —— **CLI 讀什麼憑證，它
 | RAG-Fusion | Branching | 多個 query 平行查再 RRF 融合 | Query Expansion 系列 |
 | **Self-Ask** | Linear | 顯式寫出後續子問題，一個一個查 | Press et al. 2022 |
 | **IRCoT** | Looping | 推理**每一句**都帶動下一次檢索 | Trivedi et al. 2023 |
-| CRAG | Conditional | 評分後走三分支，最後一支上網 | Yan et al. 2024 |
+| CRAG | Conditional | 評分後三分支：精煉 / 改用網路 / 兩者合併 | Yan et al. 2024 |
 | Self-RAG | Looping | 每輪自問四個反思問題 | Asai et al. 2024 |
 | **FLARE** | Looping | 先寫草稿，沒把握的句子才去查 | Jiang et al. 2023 |
 | **Search-o1** | Looping | 推理卡住才查，且先精煉再注入 | Li et al. 2025 |
 | Adaptive-RAG | Conditional | 先判斷複雜度再決定花多少力氣 | Jeong et al. 2024 |
 | Modular RAG | 自適應 | 全部模組給 agent 自己編排 | Gao et al. 2024 |
+| **論文重點 Slide** | Linear | 讀 PDF → 產出可直接貼投影片的重點 | 實用案例，非論文方法 |
 
 **粗體的五個是純政策架構** —— 加它們的時候一行程式碼都沒寫，只是各多了一份 `Architecture`。
 這是 Modular RAG 主張最直接的證據：五篇論文，零行新程式碼。
@@ -147,6 +148,45 @@ uv run uvicorn app:app --reload
 
 ---
 
+## 把論文 PDF 讀進來
+
+`.pdf` 和 `.md` 一樣會被索引 —— 但切塊策略不同：PDF 沒有可靠的 heading 結構，
+所以改用**頁**當邊界，而且**頁碼會留在片段裡**。
+
+```bash
+uv sync --extra pdf                    # 裝 pymupdf
+bash scripts/fetch_papers.sh           # 從 arXiv 抓這套教材引用的 12 篇論文
+uv run python index_corpus.py          # 重建索引
+```
+
+論文 PDF **不在 repo 裡**（別人的著作，各自有授權，這個 repo 不該替他們重新散布），
+所以用腳本抓，抓下來的檔案已經在 `.gitignore`。
+
+抓完之後你可以直接問論文內容，而且 **點引用會在頁面上開啟該頁 PDF**：
+
+```
+[papers/crag.pdf#13]  ← 點下去 → 內嵌閱讀器跳到第 4 頁
+```
+
+這件事對讀論文很重要：抽出來的純文字看不到圖表，但論文的關鍵常常就在圖裡。
+面板同時保留「抽出來的純文字」摺疊區 —— 那才是檢索實際比對的內容，兩者對照著看。
+
+### 案例：論文重點 Slide
+
+選 `論文重點 Slide` 這個架構，丟一句「把 crag 這篇論文整理成投影片重點」，它會：
+
+1. `list_corpus` 確認有哪幾篇 → 2. 檢索摘要與結論抓骨架 →
+3. 分別檢索「方法 / 數字 / 限制」並用 `grade_documents` **讀完整內文**（不只看摘要）→
+4. 輸出固定格式：一句話 / 要解決的問題 / 方法步驟 / 關鍵數字表 / **限制與代價** / 一句可以講給學生聽的話
+
+每個 bullet 都標頁碼，聽眾可以翻回原文對照。
+
+> **它抓到過我的錯。** 我在教材裡把 CRAG 的 Ambiguous 分支寫成「改寫 query 再查一輪」，
+> 跑這個架構讀原文時它主動指出：那與論文不符，Ambiguous 是「內部精煉知識 ＋ 網路結果兩者合併」。
+> 查證後確實是我錯了，已修正。這就是「強制標出處」的價值 —— 錯誤會被原文抓出來。
+
+---
+
 ## 換成你自己的知識庫
 
 `corpus/` 裡是一份自給自足的 Claude Code 參考文件（10 個 `.md` / 41 個片段），
@@ -167,14 +207,15 @@ uv run python index_corpus.py --root ~/我的文件資料夾
 modules.py        ⭐ 模組庫 + Architecture + 七個現成架構 + arun()
 retrieval.py         BM25(jieba) + 向量(e5-small/MPS) + RRF + 可插拔向量 store
 index_corpus.py      切塊建索引（按 markdown heading 切，保留前後鄰居）
-corpus/              範例語料：Claude Code 參考文件
+corpus/              範例語料：Claude Code 參考文件（.md）+ papers/（.pdf，用腳本抓）
+scripts/             fetch_papers.sh —— 從 arXiv 抓論文
 notebooks/           三本教學 notebook
 engines/
   agent_sdk.py       Claude Agent SDK（預設）
   litellm_loop.py    自寫的 tool loop，對照組
 app.py               FastAPI + SSE
 static/index.html    單檔前端，無建置
-tests/               檢索層測試（16 項）
+tests/               測試（27 項：檢索層 + 架構層）
 ```
 
 `app.py` 和 notebook 用的是**同一份** `modules.py` —— 網頁就是 notebook 02 的其中一格加了畫面。
@@ -205,7 +246,7 @@ VECTOR_STORE=chroma   # 交給 Chroma 管（uv sync --extra chroma）
 ## 測試
 
 ```bash
-uv run pytest                                   # 檢索層 16 項，不花 LLM 額度
+uv run pytest                                   # 27 項（檢索層 + 架構層），不花 LLM 額度
 ```
 
 ## 降級行為

@@ -64,7 +64,12 @@ embedding 載不動時自動退回純 BM25，是現場教學的保命機制，�
 登記進 `retrieval.build_store()`。介面只有這兩個方法是刻意的 —— RAG 對向量庫的需求就這麼點。
 加完務必讓 `test_chroma_store_agrees_with_numpy_store` 那組測試也涵蓋它：**換 store 不該換答案**。
 
-**驗證還能跑**：`uv run pytest`（檢索層 11 項）+ README 裡的 smoke 指令（會真的呼叫 LLM）。
+**驗證還能跑**：`uv run pytest`（27 項，不花額度）。
+`tests/test_architectures.py` 專門盯架構層 —— 它存在的理由是：改壞 `modules.py`
+（例如語法錯誤、policy 引用了不存在的模組）不會被檢索層的測試抓到。加新架構務必讓它跑過。
+
+**PDF 語料**：`.pdf` 依頁切塊，`Chunk.page` 帶頁碼，網頁點引用會開內嵌閱讀器跳到那一頁。
+論文本身不進 repo，用 `scripts/fetch_papers.sh` 抓。
 
 ## 已知取捨
 

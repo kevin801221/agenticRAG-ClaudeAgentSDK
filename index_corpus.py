@@ -30,7 +30,7 @@ MIN_CHARS = 100  # 不到就併進下一塊
 HEADING_RE = re.compile(r"^(#{1,4})\s+(.+?)\s*$")
 
 # 預設掃 --root 底下所有 .md。換成自己的知識庫不用改這裡，用 --root 指過去即可。
-INCLUDE_GLOBS = ["**/*.md"]
+INCLUDE_GLOBS = ["**/*.md", "**/*.pdf"]   # 論文丟進 corpus/papers/ 就會被吃進來
 EXCLUDE_PARTS = {".git", "node_modules", ".venv", "__pycache__", "data", ".claude",
                  ".ipynb_checkpoints", "site-packages"}
 
@@ -55,10 +55,15 @@ def chunk_markdown(text: str, path: str) -> list[Chunk]:
         Chunk(id=f"{path}#{i}", path=path, heading=heading, text=body)
         for i, (heading, body) in enumerate(pieces)
     ]
+    _link(chunks)
+    return chunks
+
+
+def _link(chunks: list[Chunk]) -> None:
+    """把片段依文件順序串成雙向鏈，expand 靠這個往前後抓。"""
     for i, c in enumerate(chunks):
         c.prev_id = chunks[i - 1].id if i else None
         c.next_id = chunks[i + 1].id if i + 1 < len(chunks) else None
-    return chunks
 
 
 def _split_by_heading(text: str, fallback: str) -> list[tuple[str, str]]:
@@ -143,6 +148,49 @@ def _split_long(body: str) -> list[str]:
     return out
 
 
+
+# ── PDF ────────────────────────────────────────────────────
+
+
+def chunk_pdf(path: Path, rel: str) -> list[Chunk]:
+    """把 PDF 依「頁」切塊。
+
+    PDF 沒有可靠的 heading 結構（版面是排出來的，不是語意標記），
+    所以不硬解章節，改用頁當天然邊界 —— 而且頁碼讓引用可以直接跳回原文那一頁，
+    這對讀論文特別重要：學生看到 [papers/crag.pdf#3] 可以馬上翻到第 3 頁對照。
+
+    需要 pymupdf：uv sync --extra pdf
+    """
+    import pymupdf
+
+    pieces: list[tuple[str, str, int]] = []  # (heading, text, page)
+    stem = Path(rel).stem
+    with pymupdf.open(path) as doc:
+        for n, page in enumerate(doc, start=1):
+            text = _clean_pdf_text(page.get_text())
+            if len(text) < MIN_CHARS:
+                continue  # 空白頁、只有頁首頁尾的頁，跳過
+            for i, part in enumerate(_split_long(text), start=1):
+                suffix = f" ({i})" if i > 1 else ""
+                pieces.append((f"{stem} > p.{n}{suffix}", part, n))
+
+    chunks = [
+        Chunk(id=f"{rel}#{i}", path=rel, heading=h, text=t, page=pg)
+        for i, (h, t, pg) in enumerate(pieces)
+    ]
+    _link(chunks)
+    return chunks
+
+
+def _clean_pdf_text(text: str) -> str:
+    """PDF 抽出來的文字有大量硬斷行與連字號斷字，先修一修再切。"""
+    text = text.replace("\u00ad", "")
+    text = re.sub(r"-\n(?=[a-z])", "", text)        # 英文連字號斷字接回去
+    text = re.sub(r"(?<=[^\n])\n(?=[^\n])", " ", text)  # 單一換行 = 排版斷行，不是段落
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text.strip()
+
+
 # ── 掃檔 ──────────────────────────────────────────────────
 
 
@@ -159,11 +207,18 @@ def build_chunks(root: Path) -> list[Chunk]:
     chunks: list[Chunk] = []
     for f in collect_files(root):
         rel = str(f.relative_to(root))
+        if f.suffix.lower() == ".pdf":
+            try:
+                chunks.extend(chunk_pdf(f, rel))
+            except ImportError:
+                print(f"[warn] 跳過 {rel}：PDF 支援要先裝 uv sync --extra pdf")
+            except Exception as exc:  # 壞掉的 PDF 不該讓整批索引失敗
+                print(f"[warn] 跳過 {rel}：{type(exc).__name__}: {exc}")
+            continue
         try:
-            text = f.read_text(encoding="utf-8")
+            chunks.extend(chunk_markdown(f.read_text(encoding="utf-8"), rel))
         except (UnicodeDecodeError, OSError):
             continue
-        chunks.extend(chunk_markdown(text, rel))
     return chunks
 
 
@@ -203,6 +258,9 @@ def main() -> None:
     save_index(data_dir, chunks, vectors, built_at)
 
     files = len({c.path for c in chunks})
+    pdf_pages = len({(c.path, c.page) for c in chunks if c.page})
+    if pdf_pages:
+        print(f"其中 PDF：{len({c.path for c in chunks if c.page})} 份 / {pdf_pages} 頁")
     print(
         f"完成：{len(chunks)} chunks / {files} 檔案 / {time.time() - started:.1f}s / "
         f"{'含向量' if vectors is not None else '純 BM25（降級）'}"

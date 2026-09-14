@@ -244,3 +244,73 @@ def test_chroma_store_returns_vectors_in_requested_order(vectors, tmp_path):
 
     assert np.allclose(got[0], [0, 0, 1], atol=1e-5)
     assert np.allclose(got[1], [1, 0, 0], atol=1e-5)
+
+
+# ── PDF 語料 ──────────────────────────────────────────────
+#
+# 論文是 PDF，不是 markdown。切塊策略也不同：PDF 沒有可靠的 heading 結構，
+# 但有「頁」這個天然邊界，而且頁碼讓引用可以直接跳到原文那一頁。
+
+from index_corpus import chunk_pdf
+
+
+@pytest.fixture
+def two_page_pdf(tmp_path):
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open()
+    for n in (1, 2):
+        page = doc.new_page()
+        body = f"這是第 {n} 頁的內容。" + ("填充文字讓這一頁夠長，才不會被當成空白頁略過。" * 6)
+        page.insert_textbox(pymupdf.Rect(40, 40, 550, 780), body, fontsize=11,
+                            fontname="china-s")
+    path = tmp_path / "paper.pdf"
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def test_pdf_chunker_records_page_numbers(two_page_pdf):
+    chunks = chunk_pdf(two_page_pdf, "papers/paper.pdf")
+
+    assert chunks, "應該要切出東西"
+    assert {c.page for c in chunks} == {1, 2}
+    assert all(c.path == "papers/paper.pdf" for c in chunks)
+
+
+def test_pdf_chunker_puts_page_in_heading(two_page_pdf):
+    chunks = chunk_pdf(two_page_pdf, "papers/paper.pdf")
+
+    assert "p.1" in chunks[0].heading
+    assert chunks[0].heading.startswith("paper")
+
+
+def test_pdf_chunker_links_neighbours(two_page_pdf):
+    chunks = chunk_pdf(two_page_pdf, "papers/paper.pdf")
+
+    assert chunks[0].prev_id is None
+    assert chunks[-1].next_id is None
+    if len(chunks) > 1:
+        assert chunks[0].next_id == chunks[1].id
+
+
+def test_pdf_chunker_skips_blank_pages(tmp_path):
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open()
+    doc.new_page()                      # 全空白
+    page = doc.new_page()
+    page.insert_textbox(pymupdf.Rect(40, 40, 550, 780),
+                        "只有這一頁有字。" * 20, fontsize=11, fontname="china-s")
+    path = tmp_path / "sparse.pdf"
+    doc.save(path)
+    doc.close()
+
+    chunks = chunk_pdf(path, "sparse.pdf")
+
+    assert {c.page for c in chunks} == {2}, "空白頁不該產生片段"
+
+
+def test_markdown_chunks_have_no_page(tmp_path):
+    from index_corpus import chunk_markdown
+    chunks = chunk_markdown("# 標題\n\n" + "內容。" * 60, "a.md")
+
+    assert all(c.page is None for c in chunks), "markdown 沒有頁碼概念"
