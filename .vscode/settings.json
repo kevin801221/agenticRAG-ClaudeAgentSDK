@@ -1,0 +1,9 @@
+{
+  "//": "VS Code 開這個資料夾時直接用專案的 .venv，不要自己另外建一個。",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "jupyter.kernels.filter": [
+    { "path": "${workspaceFolder}/notebooks/.venv/bin/python", "type": "pythonEnvironment" }
+  ],
+  "files.exclude": { "**/__pycache__": true, "**/.pytest_cache": true }
+}

@@ -60,10 +60,42 @@ cp .env.example .env
 
 uv sync --extra embeddings
 uv run python index_corpus.py            # 第一次會下載約 100MB 的 e5-small
+
+./scripts/setup_kernel.sh                # 註冊 Jupyter kernel（要跑 notebook 就一定要這步）
 ```
 
 **沒網路或不想等**：`uv run python index_corpus.py --no-vectors`
 （純 BM25，秒建，功能完整，只是 HyDE 那類向量檢索會降級）。
+
+### ⚠️ 跑 notebook 之前：kernel 一定要選對
+
+這是全場第一名的卡點，而且錯誤訊息完全不會提到 kernel。
+
+**notebook 能不能 `import modules`，跟你「開哪個資料夾」無關，
+只跟「kernel 用的是哪一支 python」有關。**
+
+`scripts/setup_kernel.sh` 會把專案的 `.venv` 註冊成一個具名 kernel。
+跑完之後，Jupyter / VS Code 的 kernel 選單挑這個：
+
+```
+agentic-rag (.venv, Python 3.13)
+```
+
+四本 notebook 檔案裡已經記著這個名字，所以裝好之後開起來通常就直接是對的。
+
+| 症狀 | 原因 | 處理 |
+|---|---|---|
+| `ModuleNotFoundError: modules` | kernel 是別的 python | 選 `agentic-rag (.venv, Python 3.13)` |
+| VS Code 說「找不到 kernel」 | 還沒跑 `setup_kernel.sh` | 跑它 |
+| VS Code 自己建了 `notebooks/.venv` | 它自作聰明 | **刪掉那個資料夾**，再選上面那個 kernel |
+| 選單裡一堆長得很像的 Python | 看路徑，要是 `<專案>/.venv/bin/python` | 認路徑不要認名字 |
+
+```bash
+uv run jupyter kernelspec list     # 確認它指到專案的 .venv
+```
+
+⚠️ 這台機器上如果有**兩份**這個專案（例如舊的內部版），
+確認你開的是 clone 下來的那一份 —— 兩份各有自己的 `.venv`，開錯就全錯。
 
 ### 認證：本機 `claude` 登入過的話，`.env` 可以完全空白
 
@@ -447,7 +479,8 @@ Studio 頂上「模型：…」點下去：OAuth 訂閱／Anthropic API Key／
 | 卡點 | 真實原因 | 處理 |
 |---|---|---|
 | `ModuleNotFoundError: modules` | notebook 的工作目錄在 `notebooks/` | 跑第一格（會自動 `chdir("..")`） |
-| VS Code 說找不到套件 | 它自己在 `notebooks/` 建了一個空 venv | kernel 選專案根的 `.venv`，不要讓它「建立新環境」 |
+| `ModuleNotFoundError: modules` | kernel 選錯了，跟開哪個資料夾無關 | 跑 `./scripts/setup_kernel.sh`，選 `agentic-rag (.venv, Python 3.13)` |
+| VS Code 說找不到套件 | 它自己在 `notebooks/` 建了一個空 venv | 刪掉 `notebooks/.venv`，再選上面那個 kernel |
 | 啟動說找不到索引 | 還沒建 | `uv run python index_corpus.py --no-vectors` |
 | 第一次跑很久沒反應 | 在下載 embedding 模型（約 100MB） | 沒網路就一律先 `--no-vectors` |
 | HyDE 效果很差 | 沒有向量索引，退回 BM25 了 | 重建索引（不加 `--no-vectors`） |
