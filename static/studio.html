@@ -3,314 +3,1180 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agentic RAG Studio — 畫布版組裝台</title>
+<title>Agentic RAG Studio — 工作流組裝台</title>
 <style>
-  :root{
-    --ground:#151B2B; --panel:#1E2639; --panel-2:#232C42; --rail:#33405C;
-    --ink:#EEF1F8; --muted:#8B96B3;
-    --signal:#F2B441;      /* 鈉燈琥珀：選中 / 正在動作 */
-    --alert:#FF7A6B;       /* 折返：往回連的線 */
-    --ok:#6FD3A8;
-    --ext:#8FA8FF;         /* SDK 內建工具 */
-    --mono:"Menlo","SF Mono",ui-monospace,monospace;
-    --sans:"Avenir Next","Helvetica Neue",-apple-system,"PingFang TC","Noto Sans TC",sans-serif;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
-  body{
-    background:var(--ground);color:var(--ink);font-family:var(--sans);
-    font-size:15px;line-height:1.6;display:flex;flex-direction:column;overflow:hidden;
-  }
-  button{
-    font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer;
-    background:var(--signal);color:#1A1205;border:0;border-radius:4px;padding:.3rem .9rem;
-  }
-  button:hover{filter:brightness(1.08)}
-  button:disabled{opacity:.5;cursor:default;filter:none}
-  .ghost{background:none;color:var(--muted);border:1px solid var(--rail);font-weight:400}
-  .ghost:hover{color:var(--ink);border-color:var(--signal);filter:none}
-  input,select,textarea{
-    font-family:inherit;background:var(--panel-2);color:var(--ink);
-    border:1px solid var(--rail);border-radius:4px;padding:.25rem .45rem;font-size:.85rem;
-  }
-  input:focus,select:focus,textarea:focus{outline:0;border-color:var(--signal)}
-  a{color:var(--signal)}
-
-  /* ── 頂 ── */
-  header{
-    display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
-    padding:.6rem 1.2rem;border-bottom:1px solid var(--rail);background:var(--panel);flex:0 0 auto;
-  }
-  header h1{font-size:1rem;margin:0;letter-spacing:.02em}
-  header .claim{
-    font-size:.82rem;color:var(--muted);border-left:2px solid var(--signal);padding-left:.7rem;
-  }
-  header .claim b{color:var(--signal);font-weight:600}
-  header .spacer{flex:1}
-  header label{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:.35rem}
-
-  main{flex:1;display:grid;grid-template-columns:230px minmax(0,1fr) 400px;min-height:0}
-
-  /* ── 模組庫 ── */
-  .palette{
-    border-right:1px solid var(--rail);background:var(--panel);overflow-y:auto;padding:.8rem;
-  }
-  .palette h2{font-size:.78rem;color:var(--muted);margin:0 0 .5rem;font-weight:600;
-    text-transform:uppercase;letter-spacing:.08em}
-  .palette .grp{margin-bottom:.9rem}
-  .palette .lbl{font-family:var(--mono);font-size:.68rem;color:var(--muted);
-    display:block;margin-bottom:.3rem}
-  .pchip{
-    display:block;font-family:var(--mono);font-size:.78rem;
-    padding:.3rem .5rem;margin-bottom:.25rem;border-radius:4px;
-    border:1px solid var(--rail);background:var(--panel-2);cursor:grab;user-select:none;
-  }
-  .pchip:hover{border-color:var(--signal)}
-  .pchip.ext{color:var(--ext);border-color:rgba(143,168,255,.35)}
-  .pchip .d{display:block;font-family:var(--sans);font-size:.7rem;color:var(--muted);
-    line-height:1.4;margin-top:.1rem}
-  .palette .tip{font-size:.72rem;color:var(--muted);line-height:1.5;margin-top:1rem;
-    border-top:1px solid var(--rail);padding-top:.6rem}
-
-  /* ── 畫布 ── */
-  .stage{position:relative;overflow:auto;min-width:0;background:
-    radial-gradient(circle at 1px 1px, rgba(139,150,179,.18) 1px, transparent 0) 0 0/22px 22px,
-    var(--ground);}
-  #canvas{position:relative;width:2600px;height:1600px}
-  #wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-  #wires path{fill:none;stroke:var(--rail);stroke-width:1.6}
-  #wires path.back{stroke:var(--alert);stroke-dasharray:5 4}
-  #wires path.sel{stroke:var(--signal);stroke-width:2.4}
-  #wires path.hit{stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
-  #wires .tip{fill:var(--rail)}
-  #wires .tip.back{fill:var(--alert)}
-
-  .node{
-    position:absolute;width:208px;border:1px solid var(--rail);border-radius:6px;
-    background:var(--panel);padding:.45rem .6rem;cursor:grab;user-select:none;
-  }
-  .node:hover{border-color:var(--signal)}
-  .node.sel{border-color:var(--signal);box-shadow:0 0 0 1px var(--signal)}
-  .node.ran{border-color:var(--ok)}
-  .node.hot{border-color:var(--signal);box-shadow:0 0 0 2px var(--signal),0 0 18px rgba(242,180,65,.35)}
-  .node .n{font-family:var(--mono);font-size:.82rem}
-  .node .s{font-size:.68rem;color:var(--muted);font-family:var(--mono)}
-  .node .d{font-size:.72rem;color:var(--muted);line-height:1.4;margin-top:.15rem;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .node.ext .n{color:var(--ext)}
-  .node.ext{border-style:dashed}
-  .node.anchor{background:var(--panel-2);border-color:var(--signal);width:170px}
-  .node.anchor .n{color:var(--signal)}
-  .node .x{
-    position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;
-    background:var(--panel-2);border:1px solid var(--rail);color:var(--muted);
-    font-size:.7rem;line-height:16px;text-align:center;display:none;cursor:pointer;
-  }
-  .node:hover .x{display:block}
-  .node .x:hover{color:var(--alert);border-color:var(--alert)}
-  .port{
-    position:absolute;width:11px;height:11px;border-radius:50%;
-    background:var(--panel-2);border:1.5px solid var(--rail);top:50%;margin-top:-5.5px;cursor:crosshair;
-  }
-  .port.out{right:-6px}
-  .port.in{left:-6px}
-  .port:hover,.port.live{background:var(--signal);border-color:var(--signal)}
-
-  .elabel{
-    position:absolute;transform:translate(-50%,-50%);z-index:3;
-    font-size:.7rem;font-family:var(--mono);white-space:nowrap;max-width:14rem;overflow:hidden;
-    background:var(--ground);border:1px solid var(--rail);border-radius:3px;
-    padding:.05rem .35rem;color:var(--muted);cursor:text;
-  }
-  .elabel:hover{border-color:var(--signal);color:var(--ink)}
-  .elabel.empty{opacity:.45}
-  .elabel input{width:9rem;font-size:.7rem;padding:0 .15rem;border:0;background:none}
-
-  .hint{
-    position:absolute;left:50%;top:38%;transform:translateX(-50%);
-    text-align:center;color:var(--muted);font-size:.85rem;line-height:1.8;pointer-events:none;
-  }
-  .hint code{font-family:var(--mono);color:var(--ink)}
-
-  /* ── 供應商 / MCP 的抽屜 ── */
-  .sheet{
-    position:fixed;inset:0;z-index:60;background:rgba(10,14,24,.72);
-    display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;
-  }
-  .sheet .box{
-    width:min(680px,100%);max-height:92vh;overflow-y:auto;
-    background:var(--panel);border:1px solid var(--rail);border-radius:8px;padding:1.1rem 1.3rem;
-  }
-  .sheet h2{margin:0 0 .2rem;font-size:1rem}
-  .sheet .sub{color:var(--muted);font-size:.8rem;margin:0 0 .9rem;line-height:1.6}
-  .sheet .close{float:right;margin:-.3rem -.4rem 0 0}
-  .sheet fieldset{border:1px solid var(--rail);border-radius:6px;padding:.7rem .9rem;margin:0 0 .7rem}
-  .sheet legend{font-size:.82rem;padding:0 .35rem;color:var(--ink)}
-  .sheet legend.on{color:var(--signal)}
-  .sheet label.f{display:flex;align-items:center;gap:.5rem;margin:.3rem 0;font-size:.8rem;color:var(--muted)}
-  .sheet label.f span{flex:0 0 9rem}
-  .sheet label.f input{flex:1;min-width:0}
-  .sheet .note2{font-size:.76rem;color:var(--muted);line-height:1.6;margin:.1rem 0 .5rem}
-  .sheet .chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.4rem}
-  .sheet .chips button{padding:.1rem .55rem;font-size:.74rem;font-weight:400;
-    background:none;color:var(--muted);border:1px solid var(--rail)}
-  .sheet .chips button:hover{color:var(--signal);border-color:var(--signal)}
-
-  .srv{border:1px solid var(--rail);border-radius:6px;padding:.5rem .7rem;margin-bottom:.45rem}
-  .srv.bad{border-color:var(--alert)}
-  .srv .h{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
-  .srv .h b{font-size:.88rem}
-  .srv .h .st{font-family:var(--mono);font-size:.7rem;color:var(--ok)}
-  .srv.bad .h .st{color:var(--alert)}
-  .srv .h .spacer{flex:1}
-  .srv .h button,.srv .h select{padding:.1rem .5rem;font-size:.72rem;font-weight:400;
-    background:none;color:var(--muted);border:1px solid var(--rail)}
-  .srv .tl{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:.25rem;line-height:1.7}
-  .srv .cfg{font-family:var(--mono);font-size:.68rem;color:var(--muted);opacity:.75;margin-top:.15rem;
-    word-break:break-all}
-
-  header .live{
-    font-family:var(--mono);font-size:.72rem;color:var(--muted);
-    border:1px solid var(--rail);border-radius:3px;padding:.12rem .5rem;cursor:pointer;
-  }
-  header .live:hover{border-color:var(--signal);color:var(--signal)}
-  header .live b{color:var(--signal);font-weight:600}
-
-  .pchip.mcp{color:var(--ok);border-color:rgba(111,211,168,.35)}
-  .pchip .src{float:right;font-size:.6rem;opacity:.8}
-  .node.mcp{border-color:rgba(111,211,168,.5);border-style:dashed}
-  .node.mcp .n{color:var(--ok)}
-  .palette .addsrv{
-    width:100%;padding:.3rem;font-size:.75rem;font-weight:400;margin-top:.2rem;
-    background:none;color:var(--muted);border:1px dashed var(--rail);border-radius:4px;
-  }
-  .palette .addsrv:hover{color:var(--signal);border-color:var(--signal)}
-
-  /* ── 右欄分頁 ── */
-  .tabs2{display:flex;gap:.25rem;border-bottom:1px solid var(--rail);margin:-.2rem -.3rem .3rem}
-  .t2{
-    flex:1;padding:.35rem;font-size:.82rem;font-weight:400;border-radius:4px 4px 0 0;
-    background:none;color:var(--muted);border:0;border-bottom:2px solid transparent;
-  }
-  .t2:hover{color:var(--ink)}
-  .t2.on{color:var(--signal);border-bottom-color:var(--signal);font-weight:600}
-  .tpane{display:none;flex-direction:column;gap:.7rem}
-  .tpane.on{display:flex}
-
-  #rq,#cq{width:100%;min-height:4.5rem;font-size:.85rem;resize:vertical}
-  .ex{display:flex;gap:.3rem;flex-wrap:wrap}
-  .ex button{padding:.1rem .5rem;font-size:.72rem;font-weight:400;align-self:auto;
-    background:none;color:var(--muted);border:1px solid var(--rail)}
-  .ex button:hover{color:var(--signal);border-color:var(--signal)}
-
-  .rtrace{display:flex;flex-direction:column;gap:.4rem}
-  .rstep{border-left:2px solid var(--rail);padding:.25rem .6rem;font-size:.78rem;line-height:1.55}
-  .rstep.act{border-color:var(--signal)}
-  .rstep.think{border-color:var(--rail);color:var(--muted)}
-  .rstep.bad{border-color:var(--alert)}
-  .rstep .t{font-family:var(--mono);font-size:.76rem;color:var(--signal)}
-  .rstep .a{font-family:var(--mono);font-size:.7rem;color:var(--muted);word-break:break-all}
-  .rstep .o{font-size:.75rem;color:var(--ink);margin-top:.15rem}
-  .rans{
-    border:1px solid var(--ok);border-radius:5px;padding:.6rem .8rem;
-    background:rgba(111,211,168,.06);font-size:.82rem;line-height:1.7;white-space:pre-wrap;
-    max-height:24rem;overflow-y:auto;
+  :root {
+    --bg-base: #0B0F19;
+    --bg-surface: #111827;
+    --bg-elevated: #1F293D;
+    --bg-card: #162032;
+    --bg-input: #1C263B;
+    
+    --border-subtle: #25334D;
+    --border-hover: #3B4E74;
+    --border-active: #F59E0B;
+    
+    --text-primary: #F3F4F6;
+    --text-secondary: #9CA3AF;
+    --text-muted: #64748B;
+    
+    --amber: #F59E0B;
+    --amber-glow: rgba(245, 158, 11, 0.25);
+    --blue: #38BDF8;
+    --blue-glow: rgba(56, 189, 248, 0.2);
+    --green: #10B981;
+    --green-glow: rgba(16, 185, 129, 0.2);
+    --red: #F87171;
+    --purple: #A78BFA;
+    
+    --mono: "JetBrains Mono", "Menlo", "SF Mono", ui-monospace, monospace;
+    --sans: "Inter", "Avenir Next", -apple-system, BlinkMacSystemFont,
+            "PingFang TC", "Noto Sans TC", sans-serif;
   }
 
-  .chatlog{display:flex;flex-direction:column;gap:.5rem;max-height:32rem;overflow-y:auto}
-  .bub{border-radius:6px;padding:.45rem .7rem;font-size:.82rem;line-height:1.7;white-space:pre-wrap}
-  .bub.me{background:var(--panel-2);border:1px solid var(--rail)}
-  .bub.ai{border-left:2px solid var(--signal);padding-left:.6rem}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; width: 100%; overflow: hidden; }
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+  }
 
-  /* ── 右欄 ── */
-  .side{
-    border-left:1px solid var(--rail);background:var(--panel);
-    overflow-y:auto;padding:.7rem 1rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;
+  /* ── 按鈕與輸入組件 ── */
+  button {
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--amber);
+    color: #0F172A;
+    border: 0;
+    border-radius: 6px;
+    padding: 0.35rem 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    transition: all 0.15s ease;
   }
-  .side h2{font-size:.82rem;margin:0;color:var(--ink)}
-  .side .sub{font-size:.74rem;color:var(--muted);margin:0}
-  .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-  .row label{font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:.3rem}
-  .row #sName{flex:1;min-width:8rem}
-  #sTurns{width:3.6rem}
-  .compiled{
-    font-family:var(--mono);font-size:.73rem;line-height:1.7;white-space:pre-wrap;
-    background:var(--panel-2);border:1px solid var(--rail);border-radius:5px;
-    padding:.55rem .7rem;max-height:16rem;overflow-y:auto;color:var(--muted);
+  button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; transform: none; }
+  
+  .ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
   }
-  .compiled b{color:var(--ink);font-weight:600}
-  .compiled .warn{color:var(--alert)}
-  #sPolicy{width:100%;min-height:14rem;font-family:var(--mono);font-size:.76rem;
-    line-height:1.65;resize:vertical}
-  .note{
-    border-left:2px solid var(--alert);padding:.3rem .65rem;font-size:.78rem;
-    background:rgba(255,122,107,.07);line-height:1.6;
+  .ghost:hover {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+    background: rgba(255, 255, 255, 0.04);
   }
-  .note b{color:var(--alert)}
-  .msg{font-family:var(--mono);font-size:.74rem;color:var(--muted);line-height:1.6}
-  .msg.bad{color:var(--alert)}
-  .msg.good{color:var(--ok)}
-  .hidden{display:none !important}
+
+  input, select, textarea {
+    font-family: inherit;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.82rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--amber);
+    box-shadow: 0 0 0 2px var(--amber-glow);
+  }
+  a { color: var(--amber); text-decoration: none; }
+
+  /* ── 頂部導航欄 (Header) ── */
+  header {
+    height: 52px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    gap: 0.8rem;
+    flex: 0 0 auto;
+    z-index: 20;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .brand-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #F59E0B, #D97706);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #0F172A;
+    font-size: 14px;
+    box-shadow: 0 0 12px var(--amber-glow);
+  }
+  header h1 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .header-badge {
+    font-size: 0.72rem;
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--amber);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .spacer { flex: 1; }
+
+  /* 頂部中間架構選單 */
+  .arch-select-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-card);
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+  }
+  .arch-select-wrapper label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .arch-select-wrapper select {
+    border: 0;
+    padding: 0.15rem 0.3rem;
+    background: transparent;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  /* LLM Provider 獨立卡片專區 */
+  .provider-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .provider-pill:hover {
+    border-color: var(--green);
+    background: rgba(16, 185, 129, 0.08);
+    color: var(--text-primary);
+  }
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+  }
+  .provider-pill b { color: var(--text-primary); font-weight: 600; }
+  .provider-pill .pill-action {
+    font-size: 0.7rem;
+    color: var(--amber);
+    margin-left: 0.2rem;
+    text-decoration: underline;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  /* ── 主要工作區 ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 380px;
+    min-height: 0;
+    position: relative;
+    transition: grid-template-columns 0.25s cubic-bezier(0.2, 0, 0, 1);
+  }
+  main.left-collapsed {
+    grid-template-columns: 48px minmax(0, 1fr) 380px;
+  }
+  main.right-collapsed {
+    grid-template-columns: 280px minmax(0, 1fr) 0px;
+  }
+  main.left-collapsed.right-collapsed {
+    grid-template-columns: 48px minmax(0, 1fr) 0px;
+  }
+
+  /* ── 左側面板 (Palette & Categories) ── */
+  .palette-panel {
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    z-index: 10;
+  }
+  .panel-top-bar {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+  }
+  .panel-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .toggle-panel-btn {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1;
+  }
+  .toggle-panel-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+    background: var(--bg-card);
+  }
+
+  /* 分類切換按鈕 (Category Tabs) */
+  .category-tabs {
+    display: flex;
+    background: var(--bg-base);
+    padding: 0.25rem 0.4rem;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 0.25rem;
+  }
+  .pal-tab-btn {
+    flex: 1;
+    background: transparent;
+    color: var(--text-muted);
+    border: 0;
+    border-radius: 4px;
+    padding: 0.35rem 0.2rem;
+    font-size: 0.73rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .pal-tab-btn:hover { color: var(--text-primary); }
+  .pal-tab-btn.active {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .badge-count {
+    display: inline-block;
+    background: rgba(255,255,255,0.08);
+    font-size: 0.65rem;
+    padding: 0 0.3rem;
+    border-radius: 8px;
+    margin-left: 0.2rem;
+  }
+
+  /* 模組搜尋過濾框 */
+  .search-wrapper {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+  }
+  .search-input {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+  }
+  .search-input::placeholder { color: var(--text-muted); }
+
+  /* 分類內容容器 */
+  .pal-contents {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.6rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .pal-tab-content { display: none; flex-direction: column; gap: 0.5rem; }
+  .pal-tab-content.active { display: flex; }
+
+  /* 手風琴 Stage Accordion */
+  .accordion-grp {
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--bg-card);
+    overflow: hidden;
+  }
+  .accordion-header {
+    padding: 0.45rem 0.65rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.02);
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  .accordion-header:hover { background: rgba(255, 255, 255, 0.05); }
+  .stage-bullet {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+  }
+  .stage-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+    font-family: var(--mono);
+  }
+  .stage-badge {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    padding: 0.05rem 0.35rem;
+    border-radius: 4px;
+  }
+  .accordion-arrow {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+  .accordion-grp.collapsed .accordion-arrow { transform: rotate(-90deg); }
+  .accordion-grp.collapsed .accordion-body { display: none; }
+  .accordion-body {
+    padding: 0.45rem 0.55rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* 模組晶片 (Chips) - 支援拖曳 */
+  .pchip {
+    display: block;
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 0.4rem 0.55rem;
+    cursor: grab;
+    -webkit-user-drag: element;
+    user-select: none;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .pchip:hover {
+    border-color: var(--amber);
+    background: var(--bg-elevated);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transform: translateX(2px);
+  }
+  .pchip:active { cursor: grabbing; }
+  .pchip-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    pointer-events: none;
+  }
+  .pchip-name {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .chip-tag {
+    font-size: 0.62rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .tag-module { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+  .tag-api { background: rgba(56, 189, 248, 0.15); color: var(--blue); }
+  .tag-mcp { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+  
+  .pchip.ext { border-color: rgba(56, 189, 248, 0.3); }
+  .pchip.ext .pchip-name { color: var(--blue); }
+  .pchip.mcp { border-color: rgba(16, 185, 129, 0.3); }
+  .pchip.mcp .pchip-name { color: var(--green); }
+  
+  .pchip .d {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+    margin-top: 0.2rem;
+    pointer-events: none;
+  }
+  .empty-hint {
+    text-align: center;
+    padding: 1.5rem 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  /* 收折狀態側欄圖標 */
+  .mini-dock {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem 0;
+  }
+  main.left-collapsed .panel-top-bar,
+  main.left-collapsed .category-tabs,
+  main.left-collapsed .search-wrapper,
+  main.left-collapsed .pal-contents,
+  main.left-collapsed .palette-footer {
+    display: none;
+  }
+  main.left-collapsed .mini-dock {
+    display: flex;
+  }
+  .mini-icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .mini-icon-btn:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  /* 模組面板底部說明 */
+  .palette-footer {
+    padding: 0.6rem 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+  }
+  .tip-box {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+  .tip-box code {
+    font-family: var(--mono);
+    color: var(--text-secondary);
+    background: var(--bg-input);
+    padding: 0 0.25rem;
+    border-radius: 3px;
+  }
+
+  /* ── 畫布區域 (Canvas Stage) ── */
+  .stage {
+    position: relative;
+    overflow: auto;
+    min-width: 0;
+    /* LangGraph / n8n 現代微點網格 */
+    background: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.1) 1px, transparent 0) 0 0/24px 24px,
+                var(--bg-base);
+  }
+  #canvas {
+    position: relative;
+    width: 2800px;
+    height: 1800px;
+  }
+  #wires {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #wires path {
+    fill: none;
+    stroke: #334155;
+    stroke-width: 1.8;
+    transition: stroke 0.15s ease;
+  }
+  #wires path.back {
+    stroke: var(--red);
+    stroke-dasharray: 5 4;
+  }
+  #wires path.sel {
+    stroke: var(--amber);
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 4px var(--amber));
+  }
+  #wires path.hit {
+    stroke: transparent;
+    stroke-width: 16;
+    pointer-events: stroke;
+    cursor: pointer;
+  }
+  #wires .tip { fill: #475569; }
+  #wires .tip.back { fill: var(--red); }
+
+  /* 節點卡片 (Nodes) */
+  .node {
+    position: absolute;
+    width: 216px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-card);
+    padding: 0.55rem 0.7rem;
+    cursor: grab;
+    user-select: none;
+    z-index: 2;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .node:hover {
+    border-color: var(--amber);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  }
+  .node.sel {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 2px var(--amber), 0 6px 20px rgba(245, 158, 11, 0.25);
+  }
+  .node.ran {
+    border-color: var(--green);
+    box-shadow: 0 0 0 1px var(--green);
+  }
+  .node.hot {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-glow);
+  }
+  
+  .node .node-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.2rem;
+  }
+  .node .n {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .node .s {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    background: var(--bg-input);
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
+  }
+  .node .d {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* 起點 / 終點節點 */
+  .node.anchor {
+    background: linear-gradient(180deg, #1C2436, #161D2E);
+    border-color: var(--amber);
+    width: 175px;
+  }
+  .node.anchor .n { color: var(--amber); }
+  
+  .node.ext {
+    border-color: rgba(56, 189, 248, 0.4);
+    border-style: dashed;
+  }
+  .node.ext .n { color: var(--blue); }
+
+  .node.mcp {
+    border-color: rgba(16, 185, 129, 0.4);
+    border-style: dashed;
+  }
+  .node.mcp .n { color: var(--green); }
+
+  /* 刪除鈕 */
+  .node .x {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    line-height: 18px;
+    text-align: center;
+    display: none;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .node:hover .x { display: block; }
+  .node .x:hover { color: var(--red); border-color: var(--red); }
+
+  /* 連接埠 Ports */
+  .port {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid #475569;
+    top: 50%;
+    margin-top: -6px;
+    cursor: crosshair;
+    transition: all 0.15s ease;
+    z-index: 3;
+  }
+  .port.out { right: -6px; }
+  .port.in { left: -6px; }
+  .port:hover, .port.live {
+    background: var(--amber);
+    border-color: var(--amber);
+    transform: scale(1.3);
+    box-shadow: 0 0 8px var(--amber);
+  }
+
+  .elabel {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    white-space: nowrap;
+    max-width: 14rem;
+    overflow: hidden;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    color: var(--text-secondary);
+    cursor: text;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .elabel:hover { border-color: var(--amber); color: var(--text-primary); }
+  .elabel.empty { opacity: 0.5; }
+  .elabel input { width: 9rem; font-size: 0.7rem; padding: 0 0.2rem; border: 0; background: none; }
+
+  .hint {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    pointer-events: none;
+    background: rgba(17, 24, 39, 0.75);
+    padding: 1.5rem 2.5rem;
+    border-radius: 12px;
+    border: 1px dashed var(--border-subtle);
+    backdrop-filter: blur(4px);
+  }
+
+  /* 浮動畫布工具列 (Floating Canvas Controls) */
+  .canvas-floating-bar {
+    position: absolute;
+    left: 1.2rem;
+    bottom: 1.2rem;
+    background: rgba(17, 24, 39, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 0.3rem 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    z-index: 15;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  }
+  .canvas-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .canvas-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border-color: var(--border-hover);
+  }
+  .bar-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border-subtle);
+  }
+
+  /* ── 右側檢視與執行面板 (Side Inspector) ── */
+  .side {
+    border-left: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    overflow-y: auto;
+    padding: 0.75rem 1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    position: relative;
+    z-index: 10;
+  }
+  main.right-collapsed .side { display: none; }
+  
+  .side-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.3rem;
+  }
+  .tabs2 {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--bg-base);
+    padding: 0.2rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    flex: 1;
+  }
+  .t2 {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 0;
+    transition: all 0.15s ease;
+  }
+  .t2:hover { color: var(--text-primary); }
+  .t2.on {
+    background: var(--bg-elevated);
+    color: var(--amber);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  
+  .tpane { display: none; flex-direction: column; gap: 0.65rem; }
+  .tpane.on { display: flex; }
+
+  .section-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 0.3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .row label {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .row #sName { flex: 1; min-width: 8rem; }
+  #sTurns { width: 3.8rem; }
+
+  .compiled {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    max-height: 14rem;
+    overflow-y: auto;
+    color: var(--text-secondary);
+  }
+  .compiled b { color: var(--text-primary); font-weight: 600; }
+  .compiled .warn { color: var(--red); }
+
+  #sPolicy {
+    width: 100%;
+    min-height: 12rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    resize: vertical;
+  }
+
+  /* 試跑面板 */
+  #rq, #cq {
+    width: 100%;
+    min-height: 4.5rem;
+    font-size: 0.82rem;
+    resize: vertical;
+  }
+  .ex {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+  .ex button {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 400;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+  .ex button:hover {
+    color: var(--amber);
+    border-color: var(--amber);
+  }
+
+  .rtrace {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    max-height: 22rem;
+    overflow-y: auto;
+    padding-right: 0.2rem;
+  }
+  .rstep {
+    border-left: 2px solid var(--border-subtle);
+    padding: 0.35rem 0.65rem;
+    font-size: 0.76rem;
+    background: rgba(255,255,255,0.015);
+    border-radius: 0 4px 4px 0;
+  }
+  .rstep.act { border-color: var(--amber); }
+  .rstep.think { border-color: var(--purple); color: var(--text-secondary); }
+  .rstep.bad { border-color: var(--red); }
+  .rstep .t { font-family: var(--mono); font-size: 0.75rem; color: var(--amber); font-weight: 600; }
+  .rstep .a { font-family: var(--mono); font-size: 0.68rem; color: var(--text-muted); word-break: break-all; margin-top: 0.1rem; }
+  .rstep .o { font-size: 0.74rem; color: var(--text-primary); margin-top: 0.2rem; }
+
+  .rans {
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    padding: 0.65rem 0.85rem;
+    background: rgba(16, 185, 129, 0.06);
+    font-size: 0.8rem;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    max-height: 22rem;
+    overflow-y: auto;
+  }
+
+  .chatlog {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 26rem;
+    overflow-y: auto;
+  }
+  .bub {
+    border-radius: 6px;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .bub.me { background: var(--bg-input); border: 1px solid var(--border-subtle); }
+  .bub.ai { border-left: 2px solid var(--amber); background: rgba(245, 158, 11, 0.05); padding-left: 0.65rem; }
+
+  .note {
+    border-left: 2px solid var(--red);
+    padding: 0.35rem 0.65rem;
+    font-size: 0.75rem;
+    background: rgba(248, 113, 113, 0.08);
+  }
+  .note b { color: var(--red); }
+  .msg { font-family: var(--mono); font-size: 0.72rem; color: var(--text-muted); }
+  .msg.bad { color: var(--red); }
+  .msg.good { color: var(--green); }
+
+  /* ── 彈出抽屜 (Modals / Sheets) ── */
+  .sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(11, 15, 25, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 5vh 1rem;
+  }
+  .sheet .box {
+    width: min(720px, 100%);
+    max-height: 88vh;
+    overflow-y: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+  }
+  .sheet h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem; }
+  .sheet .sub { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5; }
+  .sheet .close { float: right; margin: -0.3rem -0.3rem 0 0; }
+  .sheet fieldset {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.85rem;
+    background: var(--bg-card);
+  }
+  .sheet legend {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0 0.4rem;
+    color: var(--text-primary);
+  }
+  .sheet legend.on { color: var(--amber); }
+  .sheet label.f {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.4rem 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+  .sheet label.f span { flex: 0 0 9.5rem; }
+  .sheet label.f input { flex: 1; min-width: 0; }
+  .sheet .note2 { font-size: 0.74rem; color: var(--text-muted); margin: 0.2rem 0 0.5rem; }
+  .sheet .chips { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .sheet .chips button {
+    padding: 0.12rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 400;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+  .sheet .chips button:hover { color: var(--amber); border-color: var(--amber); }
+
+  .srv {
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-input);
+  }
+  .srv.bad { border-color: var(--red); }
+  .srv .h { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .srv .h b { font-size: 0.85rem; }
+  .srv .h .st { font-family: var(--mono); font-size: 0.7rem; color: var(--green); }
+  .srv.bad .h .st { color: var(--red); }
+  .srv .h .spacer { flex: 1; }
+  .srv .tl { font-family: var(--mono); font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem; line-height: 1.6; }
+
+  header .claim {
+    margin: 0; font-size: 0.8rem; color: var(--text-muted); line-height: 1.45;
+    border-left: 2px solid var(--amber); padding-left: 0.7rem; max-width: 30rem;
+  }
+  header .claim b { color: var(--amber); font-weight: 600; }
+
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 
+<!-- ── 頂部導航欄 ── -->
 <header>
-  <h1>Agentic RAG Studio</h1>
-  <span class="claim"><b>這張圖不會被執行。</b>被執行的是右邊那段 policy —— 圖只是幫你把它想清楚。</span>
+  <div class="brand">
+    <div class="brand-icon">⚡</div>
+    <h1>Agentic RAG Studio</h1>
+    <span class="header-badge">Workflow Canvas</span>
+  </div>
+
+  <!-- 這句是整頁存在的理由。拿掉它，這頁就只是另一個長得像 LangGraph 的畫布。 -->
+  <p class="claim"><b>這張圖不會被執行。</b>被執行的是右邊那段 policy —— 圖只是幫你把它想清楚。</p>
+
+  <div class="arch-select-wrapper">
+    <label>範本架構</label>
+    <select id="sFrom"><option value="">（空白）</option></select>
+  </div>
+
+  <div class="header-actions">
+    <button type="button" class="ghost" id="sClear" title="清空畫布上的節點與連線">🧹 清空畫布</button>
+  </div>
+
   <span class="spacer"></span>
-  <span class="live" id="liveProvider" title="換一個 LLM 供應商">模型：<b>讀取中…</b></span>
-  <label>從現有架構開始 <select id="sFrom"><option value="">（空白）</option></select></label>
-  <button type="button" class="ghost" id="sClear">清空畫布</button>
-  <a href="/" class="ghost" style="text-decoration:none;padding:.3rem .9rem;border:1px solid var(--rail);border-radius:4px;font-size:.85rem">回主畫面</a>
+
+  <!-- LLM Provider 獨立卡片專區 -->
+  <div class="provider-pill" id="liveProvider" title="點擊切換 LLM 供應商">
+    <span class="pulse-dot"></span>
+    <span>模型：<b>讀取中…</b></span>
+    <span class="pill-action">更換</span>
+  </div>
+
+  <a href="/" class="ghost" style="padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.8rem;">回主畫面</a>
+  <button type="button" class="toggle-panel-btn" id="toggleRightBtn" onclick="toggleRightPanel()" title="收起/展開右側面板">⇥</button>
 </header>
 
+<!-- ── 主體三欄佈局 ── -->
 <main>
-  <section class="palette">
-    <h2>模組庫</h2>
-    <div id="pal"></div>
-    <button type="button" class="addsrv" id="openMcp">＋ 接一個 MCP server</button>
-    <p class="tip">
-      拖到畫布上放一個模組。<br>
-      從節點右邊的圓點拉到另一個節點，畫一條連線。<br>
-      連線上的方框可以寫條件（「評分不足」）。<br>
-      往回連的線會變紅色 —— 那是折返。<br>
-      選中節點或連線按 <code>Delete</code> 刪掉。
-    </p>
+  <!-- 左側模組與工具庫 -->
+  <section class="palette-panel">
+    <div class="panel-top-bar">
+      <span class="panel-title">
+        <span>元件庫</span>
+      </span>
+      <button type="button" class="toggle-panel-btn" id="toggleLeftBtn" onclick="toggleLeftPanel()" title="收起/展開左側面板">⇤</button>
+    </div>
+
+    <!-- 3 大分類 Tabs -->
+    <div class="category-tabs">
+      <button type="button" class="pal-tab-btn active" data-tab="modules" onclick="switchPalTab('modules')">
+        🧱 RAG 模組
+      </button>
+      <button type="button" class="pal-tab-btn" data-tab="api" onclick="switchPalTab('api')">
+        ⚡️ API 工具 <span class="badge-count" id="apiBadge">0</span>
+      </button>
+      <button type="button" class="pal-tab-btn" data-tab="mcp" onclick="switchPalTab('mcp')">
+        🔌 MCP 工具 <span class="badge-count" id="mcpBadge">0</span>
+      </button>
+    </div>
+
+    <!-- 搜尋過濾框 -->
+    <div class="search-wrapper">
+      <input type="text" class="search-input" id="palSearch" placeholder="🔍 搜尋模組或工具..." oninput="filterPalette(this.value)">
+    </div>
+
+    <!-- 分類內容區 -->
+    <div class="pal-contents">
+      <!-- 1. RAG 模組 (手風琴) -->
+      <div class="pal-tab-content active" id="palTab_modules">
+        <div id="palModulesList"></div>
+      </div>
+
+      <!-- 2. API & SDK 內建工具 -->
+      <div class="pal-tab-content" id="palTab_api">
+        <div id="palApiList"></div>
+      </div>
+
+      <!-- 3. MCP 擴充伺服器與工具 -->
+      <div class="pal-tab-content" id="palTab_mcp">
+        <button type="button" class="ghost" id="openMcp" style="width: 100%; margin-bottom: 0.4rem; padding: 0.45rem; border-style: dashed; color: var(--green); border-color: rgba(16,185,129,0.4);">
+          ＋ 接一個 MCP server
+        </button>
+        <div id="palMcpList"></div>
+      </div>
+
+      <!-- 相容容器：避免舊有代碼拋出 null 錯誤 -->
+      <div id="pal" class="hidden"></div>
+    </div>
+
+    <!-- 收折時的小圖標欄 -->
+    <div class="mini-dock">
+      <div class="mini-icon-btn" onclick="toggleLeftPanel()" title="展開元件庫">🧱</div>
+      <div class="mini-icon-btn" onclick="openSheet('mcpSheet')" title="管理 MCP">🔌</div>
+      <div class="mini-icon-btn" onclick="openSheet('provSheet')" title="LLM 供應商">⚙️</div>
+    </div>
+
+    <!-- 底部操作提示 -->
+    <div class="palette-footer">
+      <div class="tip-box">
+        • 拖曳卡片或<b>雙擊卡片</b>放置於畫布<br>
+        • 節點圓點拉線連接，<code>Delete</code> 鍵刪除
+      </div>
+    </div>
   </section>
 
+  <!-- 中間畫布區域 (Canvas Stage) -->
   <section class="stage" id="stage">
     <div id="canvas">
       <svg id="wires"></svg>
       <p class="hint" id="hint">
-        從左邊拖一個模組進來。<br>
-        或用右上角「從現有架構開始」載入一個現成的來改。
+        從左邊拖曳模組進來組裝。<br>
+        或用上方「範本架構」載入現成工作流。
       </p>
+    </div>
+
+    <!-- 畫布浮動控制欄 (LangGraph / n8n 風格) -->
+    <div class="canvas-floating-bar">
+      <button type="button" class="canvas-btn" onclick="autoLayout()" title="照連線深度自動整齊排版">✨ 自動排版</button>
+      <div class="bar-divider"></div>
+      <button type="button" class="canvas-btn" id="canvasRedrawBtn" onclick="$('sRedraw').click()" title="照右側 policy 重新連線">⚡️ 照 policy 畫線</button>
+      <div class="bar-divider"></div>
+      <button type="button" class="canvas-btn" onclick="centerStartNode()" title="聚焦到起點節點">🎯 置中起點</button>
+      <div class="bar-divider"></div>
+      <button type="button" class="canvas-btn" onclick="toggleFocusCanvas()" title="畫布全螢幕/專注模式">⛶ 專注畫布</button>
     </div>
   </section>
 
+  <!-- 右側檢查與設定面板 (Side Inspector) -->
   <section class="side">
-    <div class="tabs2">
-      <button type="button" class="t2 on" data-t="tSetup">設定</button>
-      <button type="button" class="t2" data-t="tRun">試跑</button>
-      <button type="button" class="t2" data-t="tChat">架構師</button>
+    <div class="side-header">
+      <div class="tabs2">
+        <button type="button" class="t2 on" data-t="tSetup">⚙️ 編排設定</button>
+        <button type="button" class="t2" data-t="tRun">▶️ 即時試跑</button>
+        <button type="button" class="t2" data-t="tChat">🤖 AI 架構師</button>
+      </div>
     </div>
 
+    <!-- Tab 1: 設定與 Policy -->
     <div class="tpane on" id="tSetup">
       <div class="row">
-        <label style="flex:1">名字 <input id="sName" placeholder="例如：客服知識庫用"></label>
+        <label style="flex:1">架構名稱 <input id="sName" placeholder="例如：客服知識庫專用"></label>
       </div>
       <div class="row">
-        <label style="flex:1">編排 <input id="sOrch" placeholder="Linear / Conditional / Branching / Looping" style="flex:1"></label>
-        <label>上限 <input id="sTurns" type="number" min="1" max="30" value="12"></label>
+        <label style="flex:1">編排模式 <input id="sOrch" placeholder="Linear / Conditional / Looping" style="flex:1"></label>
+        <label>輪數上限 <input id="sTurns" type="number" min="1" max="30" value="12"></label>
       </div>
 
-      <h2>這張圖的意思</h2>
-      <p class="sub">把你畫的連線讀成文字。看得懂才表示這張圖真的說清楚了。</p>
+      <div class="section-title">流程語意解析</div>
+      <p class="sub">畫布連線會自動編譯成邏輯描述，確認架構是否流暢。</p>
       <div class="compiled" id="sCompiled"></div>
 
-      <h2>policy — 真正會被執行的東西</h2>
-      <p class="sub">agent 收到的是這段字，不是那張圖。</p>
+      <div class="section-title">Policy 編排契約</div>
+      <p class="sub">Agent 真正執行的提示規範（由下方的圖或 AI 生成）。</p>
       <div class="note hidden" id="sNote"></div>
       <div class="row">
         <button type="button" class="ghost" id="sWrite">照這張圖幫我寫 policy</button>
@@ -318,50 +1184,49 @@
       </div>
       <textarea id="sPolicy" placeholder="什麼時候用哪個模組、判斷條件是什麼、失敗了怎麼辦、出處要怎麼標。"></textarea>
 
-      <div class="row">
-        <button type="button" id="sSave">存起來</button>
+      <div class="row" style="margin-top: 0.4rem;">
+        <button type="button" id="sSave">💾 儲存為架構</button>
         <span class="msg" id="sMsg"></span>
       </div>
     </div>
 
+    <!-- Tab 2: 試跑面板 -->
     <div class="tpane" id="tRun">
-      <h2>試跑一題</h2>
-      <p class="sub">不用先存檔。拿現在畫布上這份草稿直接跑，看它到底會不會動、
-        走的順序跟你畫的一不一樣。</p>
-      <textarea id="rq" placeholder="例如：hook 要怎麼擋住寫入 .env？"></textarea>
+      <div class="section-title">即時試跑測試</div>
+      <p class="sub">不用先存檔，拿當前畫布上的組態直接驗證執行軌跡。</p>
+      <textarea id="rq" placeholder="輸入問題，例如：hook 要怎麼擋住寫入 .env？"></textarea>
       <div class="ex" id="rEx"></div>
       <div class="row">
-        <button type="button" id="rGo">跑</button>
-        <button type="button" class="ghost" id="rClear">清掉</button>
+        <button type="button" id="rGo">▶️ 開始測試</button>
+        <button type="button" class="ghost" id="rClear">清空結果</button>
         <span class="msg" id="rMsg"></span>
       </div>
       <div class="rtrace" id="rTrace"></div>
       <div class="rans hidden" id="rAns"></div>
     </div>
 
+    <!-- Tab 3: AI 架構師 -->
     <div class="tpane" id="tChat">
-      <h2>聊出一個架構</h2>
-      <p class="sub">講一下你的情境，它會問幾個會影響架構的問題（每個都說明為什麼問），
-        然後直接把架構畫到左邊的畫布上。</p>
+      <div class="section-title">聊出一個架構</div>
+      <p class="sub">描述你的業務場景，AI 將引導架構設計並直接繪製在左側畫布上。</p>
       <div class="chatlog" id="cLog"></div>
-      <textarea id="cq" placeholder="先講一下你的情境：什麼語料、誰在用、大概問什麼"></textarea>
+      <textarea id="cq" placeholder="說明情境：什麼語料、誰在用、使用者會問什麼問題..."></textarea>
       <div class="row">
-        <button type="button" id="cGo">送出</button>
+        <button type="button" id="cGo">送出給 AI</button>
         <span class="msg" id="cMsg"></span>
       </div>
     </div>
   </section>
 </main>
 
+<!-- ── LLM 供應商設定抽屜 ── -->
 <div class="sheet hidden" id="provSheet">
   <div class="box">
     <button type="button" class="ghost close" data-close="provSheet">關閉</button>
-    <h2>LLM 供應商</h2>
-    <p class="sub">SDK 是去 spawn <code>claude</code> 這支 CLI，所以「用哪個模型」是<strong>環境變數</strong>的事，不是程式碼的事。
-      換供應商<strong>不用重開服務，也不用改任何一個模組或 policy</strong> ——
-      下面填的 token 只留在記憶體，不會寫進 .env。</p>
+    <h2>LLM 供應商管理</h2>
+    <p class="sub">換供應商<strong>不用重開服務，也不用改任何一個模組或 policy</strong> —— 所填 Token 僅保留在記憶體中。</p>
     <div id="provForms"></div>
-    <div class="row">
+    <div class="row" style="margin-top: 0.8rem;">
       <button type="button" id="provTest" class="ghost">試連看看</button>
       <button type="button" id="provReset" class="ghost">還原成預設（OAuth 訂閱）</button>
       <span class="msg" id="provMsg"></span>
@@ -369,42 +1234,49 @@
   </div>
 </div>
 
+<!-- ── MCP Server 設定抽屜 ── -->
 <div class="sheet hidden" id="mcpSheet">
   <div class="box">
     <button type="button" class="ghost close" data-close="mcpSheet">關閉</button>
-    <h2>外部 MCP server</h2>
-    <p class="sub">我們自己那七個模組，本來就是包成一個叫 <code>ragmod</code> 的 MCP server 餵給 SDK 的。
-      所以接一個別人的 MCP server，跟自己寫一個模組，<strong>對編排來說是同一件事</strong> ——
-      <code>mcp__ragmod__search</code> 和 <code>mcp__context7__query-docs</code>
-      在 policy 裡都只是一個名字。</p>
+    <h2>外部 MCP Server 管理</h2>
+    <p class="sub">接上外部 MCP 工具，與原生 RAG 模組共享同等編排能力。</p>
 
     <fieldset>
-      <legend>已接上的</legend>
+      <legend>已連線的 Server</legend>
       <div id="mcpList"></div>
     </fieldset>
 
     <fieldset>
-      <legend>從你的 Claude Code 直接搬過來</legend>
-      <p class="note2">讀 <code>~/.claude.json</code> 裡已經裝好的 server，按一下就接。只在你自己這台機器上顯示。</p>
+      <legend>從本機 Claude Code 快速匯入</legend>
+      <p class="note2">讀取 <code>~/.claude.json</code> 中已安裝的 server，一鍵直接掛載。</p>
       <div id="mcpImport"></div>
     </fieldset>
 
     <fieldset>
-      <legend>自己加一個</legend>
-      <label class="f"><span>名字</span><input id="mcpName" placeholder="context7"></label>
-      <label class="f"><span>種類</span>
-        <select id="mcpKind"><option value="http">http</option><option value="sse">sse</option><option value="stdio">stdio（本機指令）</option></select>
+      <legend>新增自訂 MCP Server</legend>
+      <label class="f"><span>名稱</span><input id="mcpName" placeholder="context7"></label>
+      <label class="f"><span>連線種類</span>
+        <select id="mcpKind">
+          <option value="http">http</option>
+          <option value="sse">sse</option>
+          <option value="stdio">stdio（本機指令）</option>
+        </select>
       </label>
       <label class="f" id="mcpUrlRow"><span>URL</span><input id="mcpUrl" placeholder="https://mcp.context7.com/mcp"></label>
       <label class="f hidden" id="mcpCmdRow"><span>指令</span><input id="mcpCmd" placeholder="npx"></label>
       <label class="f hidden" id="mcpArgsRow"><span>參數（空白分隔）</span><input id="mcpArgs" placeholder="-y @modelcontextprotocol/server-filesystem /tmp"></label>
-      <label class="f"><span>放在哪個階段</span>
-        <select id="mcpStage"><option>Indexing</option><option>Pre-retrieval</option><option selected>Retrieval</option><option>Post-retrieval</option></select>
+      <label class="f"><span>所屬階段</span>
+        <select id="mcpStage">
+          <option>Indexing</option>
+          <option>Pre-retrieval</option>
+          <option selected>Retrieval</option>
+          <option>Post-retrieval</option>
+        </select>
       </label>
-      <p class="note2">階段只影響它畫在流程圖的哪一欄。選錯不會壞，但學生會看不懂它在流程的哪個位置。</p>
-      <div class="row">
-        <button type="button" id="mcpTest" class="ghost">試連看看</button>
-        <button type="button" id="mcpAdd">連上並加入</button>
+      <p class="note2">階段決定它在流程圖中的欄位歸屬。</p>
+      <div class="row" style="margin-top: 0.6rem;">
+        <button type="button" id="mcpTest" class="ghost">試連測試</button>
+        <button type="button" id="mcpAdd">連線並加入</button>
         <span class="msg" id="mcpMsg"></span>
       </div>
     </fieldset>
@@ -412,6 +1284,7 @@
 </div>
 
 <script>
+
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -445,22 +1318,8 @@ Promise.all([
 });
 
 function buildPalette() {
-  $('pal').innerHTML = STAGES.map(st =>
-    '<div class="grp"><span class="lbl">' + esc(st.stage) + '</span>' +
-    st.modules.map(m =>
-      '<span class="pchip' + (m.mcp ? ' mcp' : (m.builtin ? ' ext' : '')) +
-      '" draggable="true" data-name="' + esc(m.name) + '">' +
-      '<span class="src">' + (m.mcp ? 'MCP' : (m.builtin ? 'SDK' : '')) + '</span>' +
-      esc(m.short || m.name) +
-      '<span class="d">' + esc(m.description) + '</span></span>').join('') +
-    '</div>').join('');
-  $('pal').querySelectorAll('.pchip').forEach(c => {
-    c.ondragstart = e => e.dataTransfer.setData('text/plain', c.dataset.name);
-  });
+  renderCategorizedPalette();
 }
-
-/* ══════════ 節點與連線 ══════════ */
-
 function reset() {
   G.nodes = [
     { id: 'n_start', name: START, x: 60, y: 300 },
@@ -1364,6 +2223,194 @@ $('sSave').onclick = () => {
     .catch(err => say('失敗：' + err, 'bad'))
     .finally(() => { $('sSave').disabled = false; });
 };
+
+
+/* ══════════ 現代化分類、手風琴與過濾 ══════════ */
+let currentPalTab = 'modules';
+let palFilterQuery = '';
+
+window.switchPalTab = function(tab) {
+  currentPalTab = tab;
+  document.querySelectorAll('.pal-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  document.querySelectorAll('.pal-tab-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'palTab_' + tab);
+  });
+  renderCategorizedPalette();
+};
+
+window.toggleAccordion = function(headerEl) {
+  const grp = headerEl.closest('.accordion-grp');
+  if (grp) grp.classList.toggle('collapsed');
+};
+
+window.filterPalette = function(query) {
+  palFilterQuery = (query || '').trim().toLowerCase();
+  renderCategorizedPalette();
+};
+
+function renderCategorizedPalette() {
+  const modContainer = $('palModulesList');
+  const apiContainer = $('palApiList');
+  const mcpContainer = $('palMcpList');
+  const legacyPal = $('pal');
+
+  if (!modContainer || !apiContainer || !mcpContainer) return;
+
+  const matches = m => {
+    if (!palFilterQuery) return true;
+    const s = ((m.short || m.name) + ' ' + (m.description || '') + ' ' + (m.stage || '')).toLowerCase();
+    return s.includes(palFilterQuery);
+  };
+
+  // 1. RAG 模組 (非 builtin 且非 mcp)
+  let modHtml = '';
+  STAGES.forEach((st) => {
+    const list = st.modules.filter(m => !m.builtin && !m.mcp && matches(m));
+    if (list.length || !palFilterQuery) {
+      modHtml += `
+      <div class="accordion-grp grp" data-stage="${esc(st.stage)}">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <span class="stage-bullet bullet-${esc(st.stage.toLowerCase())}"></span>
+          <span class="stage-title">${esc(st.stage)}</span>
+          <span class="stage-badge">${list.length}</span>
+          <span class="accordion-arrow">▾</span>
+        </div>
+        <div class="accordion-body">
+          ${list.map(m => `
+            <div class="pchip" draggable="true" data-name="${esc(m.name)}" title="拖到畫布上放放看，或點擊快速加入">
+              <div class="pchip-header">
+                <span class="pchip-name">${esc(m.short || m.name)}</span>
+                <span class="chip-tag tag-module">模組</span>
+              </div>
+              <span class="d">${esc(m.description)}</span>
+            </div>
+          `).join('')}
+          ${list.length === 0 ? '<div class="empty-hint">無符合模組</div>' : ''}
+        </div>
+      </div>`;
+    }
+  });
+  modContainer.innerHTML = modHtml || '<div class="empty-hint">沒有找到相符的模組</div>';
+
+  // 2. API & SDK 內建工具 (builtin 且非 mcp)
+  const apiModules = [];
+  STAGES.forEach(st => st.modules.forEach(m => {
+    if (m.builtin && !m.mcp && matches(m)) apiModules.push(m);
+  }));
+  if ($('apiBadge')) $('apiBadge').textContent = apiModules.length;
+  apiContainer.innerHTML = apiModules.length ? apiModules.map(m => `
+    <div class="pchip ext" draggable="true" data-name="${esc(m.name)}" title="拖到畫布上放放看，或點擊快速加入">
+      <div class="pchip-header">
+        <span class="pchip-name">${esc(m.short || m.name)}</span>
+        <span class="chip-tag tag-api">API / SDK</span>
+      </div>
+      <span class="d">${esc(m.description)}</span>
+    </div>
+  `).join('') : '<div class="empty-hint">暫無 API 工具</div>';
+
+  // 3. MCP 擴充工具 (mcp)
+  const mcpModules = [];
+  STAGES.forEach(st => st.modules.forEach(m => {
+    if (m.mcp && matches(m)) mcpModules.push(m);
+  }));
+  if ($('mcpBadge')) $('mcpBadge').textContent = mcpModules.length;
+  mcpContainer.innerHTML = mcpModules.length ? mcpModules.map(m => `
+    <div class="pchip mcp" draggable="true" data-name="${esc(m.name)}" title="拖到畫布上放放看，或點擊快速加入">
+      <div class="pchip-header">
+        <span class="pchip-name">${esc(m.short || m.name)}</span>
+        <span class="chip-tag tag-mcp">MCP</span>
+      </div>
+      <span class="d">${esc(m.description)}</span>
+    </div>
+  `).join('') : '<div class="empty-hint">尚未掛載 MCP 工具</div>';
+
+  // 綁定所有晶片的拖曳事件與雙擊快速加入
+  document.querySelectorAll('.pchip').forEach(c => {
+    c.ondragstart = e => {
+      e.dataTransfer.setData('text/plain', c.dataset.name);
+      e.dataTransfer.effectAllowed = 'copyMove';
+    };
+    c.ondblclick = () => {
+      // 雙擊快速加入至可視畫布中心
+      const stage = $('stage');
+      const x = stage.scrollLeft + 350 + (Math.random() * 80 - 40);
+      const y = stage.scrollTop + 220 + (Math.random() * 80 - 40);
+      addNode(c.dataset.name, x, y);
+    };
+  });
+
+  // 同步更新隱藏相容容器 pal
+  if (legacyPal && legacyPal !== modContainer) {
+    legacyPal.innerHTML = STAGES.map(st =>
+      '<div class="grp"><span class="lbl">' + esc(st.stage) + '</span>' +
+      st.modules.map(m =>
+        '<span class="pchip' + (m.mcp ? ' mcp' : (m.builtin ? ' ext' : '')) +
+        '" draggable="true" data-name="' + esc(m.name) + '">' +
+        '<span class="src">' + (m.mcp ? 'MCP' : (m.builtin ? 'SDK' : '')) + '</span>' +
+        esc(m.short || m.name) +
+        '<span class="d">' + esc(m.description) + '</span></span>').join('') +
+      '</div>').join('');
+    legacyPal.querySelectorAll('.pchip').forEach(c => {
+      c.ondragstart = e => {
+        e.dataTransfer.setData('text/plain', c.dataset.name);
+        e.dataTransfer.effectAllowed = 'copyMove';
+      };
+    });
+  }
+}
+
+// 增強 stage 上的 drop 體驗
+const origStageOver = $('stage').ondragover;
+$('stage').ondragover = e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  if (origStageOver) origStageOver(e);
+};
+
+/* ══════════ 面板收合 / 伸縮 / 畫布輔助功能 ══════════ */
+window.toggleLeftPanel = function() {
+  const main = document.querySelector('main');
+  main.classList.toggle('left-collapsed');
+  const btn = $('toggleLeftBtn');
+  if (btn) btn.innerHTML = main.classList.contains('left-collapsed') ? '⇥' : '⇤';
+};
+
+window.toggleRightPanel = function() {
+  const main = document.querySelector('main');
+  main.classList.toggle('right-collapsed');
+  const btn = $('toggleRightBtn');
+  if (btn) btn.innerHTML = main.classList.contains('right-collapsed') ? '⇤' : '⇥';
+};
+
+window.toggleFocusCanvas = function() {
+  const main = document.querySelector('main');
+  const isFocused = main.classList.contains('canvas-focus');
+  if (isFocused) {
+    main.classList.remove('canvas-focus', 'left-collapsed', 'right-collapsed');
+  } else {
+    main.classList.add('canvas-focus', 'left-collapsed', 'right-collapsed');
+  }
+};
+
+window.centerStartNode = function() {
+  const start = G.nodes.find(n => n.name === START);
+  if (start) {
+    $('stage').scrollTo({
+      left: Math.max(0, start.x - 120),
+      top: Math.max(0, start.y - 150),
+      behavior: 'smooth'
+    });
+  }
+};
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.sheet').forEach(s => s.classList.add('hidden'));
+  }
+});
+
 </script>
 </body>
 </html>
