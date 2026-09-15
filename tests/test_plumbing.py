@@ -184,3 +184,21 @@ def test_json_block_picks_the_architecture_not_any_json():
 """
     got = architect._json_block(reply)
     assert got and got["name"] == "A"
+
+
+def test_a_workflow_with_only_a_builtin_tool_is_legal():
+    """只放一顆 WebSearch 也是一個工作流 —— n8n 那種「給了權限就該跑得動」。
+
+    第一版要求 modules 非空，所以畫布上只有 WebSearch 會被擋在門口，
+    而且錯誤訊息還說「畫布上還沒有模組」—— 使用者明明看到它在那裡。
+    """
+    ok, why = architect.validate({
+        "name": "只上網查", "policy": "直接用 WebSearch 查，然後回答。",
+        "modules": [], "builtin_tools": ["WebSearch"],
+    })
+    assert ok, why
+
+    ok, why = architect.validate({
+        "name": "什麼都沒有", "policy": "亂寫", "modules": [],
+    })
+    assert not ok and "工具" in why

@@ -554,8 +554,11 @@ async def try_draft(body: dict = Body(...)) -> StreamingResponse:
     question = str(body.get("q") or "").strip()
     if not question:
         raise HTTPException(400, "沒有問題可以跑")
-    spec.setdefault("name", "（草稿）")
-    spec.setdefault("paper", "Studio 草稿")
+    # 前端送的是空字串不是缺 key，setdefault 接不住 —— 試跑本來就不該逼人先取名字
+    if not str(spec.get("name") or "").strip():
+        spec["name"] = "（草稿）"
+    if not str(spec.get("paper") or "").strip():
+        spec["paper"] = "Studio 草稿"
     ok, why = architect.validate(spec)
     if not ok:
         raise HTTPException(400, why)
@@ -639,9 +642,10 @@ async def architect_policy(body: dict = Body(...)) -> dict:
     """自己拖完模組，讓 agent 把 policy 補上 —— 拖拉只決定有哪些模組。"""
     mods = [m for m in (body.get("modules") or []) if m in MODULES]
     builtin = [b for b in (body.get("builtin_tools") or []) if b in BUILTIN_TOOLS]
-    if not mods:
-        raise HTTPException(400, "至少要選一個模組")
-    return await architect.write_policy(mods, builtin, str(body.get("note") or ""))
+    mcp = list(body.get("mcp_tools") or [])
+    if not (mods or builtin or mcp):
+        raise HTTPException(400, "至少要選一個工具")
+    return await architect.write_policy(mods + mcp, builtin, str(body.get("note") or ""))
 
 
 @app.post("/api/architect/graph")

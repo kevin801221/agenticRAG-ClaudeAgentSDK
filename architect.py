@@ -298,8 +298,12 @@ def validate(spec: dict) -> tuple[bool, str]:
     if not str(spec.get("policy", "")).strip():
         return False, "沒有 policy，那等於沒有編排"
     mods = spec.get("modules") or []
-    if not isinstance(mods, list) or not mods:
-        return False, "modules 是空的"
+    if not isinstance(mods, list):
+        return False, "modules 要是一個清單"
+    # 一個本地模組都沒有也可以 —— 只掛 WebSearch 或一個 MCP 工具就跑得動，
+    # 那也是一個合法的（而且很好教的）工作流。三種來源至少要有一個。
+    if not mods and not (spec.get("builtin_tools") or spec.get("mcp_tools")):
+        return False, "一個工具都沒有"
     unknown = [m for m in mods if m not in MODULES]
     if unknown:
         return False, f"用了不存在的模組：{unknown}"

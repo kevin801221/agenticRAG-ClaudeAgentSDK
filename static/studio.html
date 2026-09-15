@@ -613,9 +613,10 @@
   .node.anchor {
     background: linear-gradient(180deg, #1C2436, #161D2E);
     border-color: var(--amber);
-    width: 175px;
+    width: 200px;
   }
   .node.anchor .n { color: var(--amber); }
+  .node.anchor .d { font-size: 0.68rem; opacity: 0.85; }
   
   .node.ext {
     border-color: rgba(56, 189, 248, 0.4);
@@ -1022,6 +1023,14 @@
   }
   header .claim b { color: var(--amber); font-weight: 600; }
 
+  /* 框選：在空白處按住拖出來的那個框 */
+  .marquee {
+    position: absolute; z-index: 5; pointer-events: none;
+    border: 1px solid var(--amber);
+    background: rgba(245, 158, 11, 0.09);
+    border-radius: 3px;
+  }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -1289,14 +1298,15 @@ const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const NODE_W = 208, NODE_H = 56, ANCHOR_W = 170;
+const NODE_W = 208, NODE_H = 56, ANCHOR_W = 200;
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 const START = '__start__', ANSWER = '__answer__';
 const META = {};                 // name -> {stage, description, builtin}
 let STAGES = [], ARCHS = [];
 
-const G = { nodes: [], edges: [], sel: null, selEdge: null, seq: 1 };
+// picked 是一組節點 id —— 框選要能一次搬好幾個，單選只是「這組裡面只有一個」
+const G = { nodes: [], edges: [], picked: new Set(), selEdge: null, seq: 1 };
 
 /* ══════════ 載入 ══════════ */
 
@@ -1326,7 +1336,8 @@ function reset() {
     { id: 'n_answer', name: ANSWER, x: 1160, y: 300 },
   ];
   G.edges = [];
-  G.sel = G.selEdge = null;
+  G.picked.clear();
+  G.selEdge = null;
   G.seq = 1;
   render();
 }
@@ -1342,7 +1353,7 @@ function removeNode(id) {
   if (!n || n.name === START || n.name === ANSWER) return;   // 兩個端點不能刪
   G.nodes = G.nodes.filter(x => x.id !== id);
   G.edges = G.edges.filter(e => e.from !== id && e.to !== id);
-  G.sel = null;
+  G.picked.delete(id);
   render();
 }
 
@@ -1359,7 +1370,7 @@ const nodeW = n => (n.name === START || n.name === ANSWER) ? ANCHOR_W : NODE_W;
 
 function label(n) {
   if (n.name === START) return '問題進來';
-  if (n.name === ANSWER) return '產生答案';
+  if (n.name === ANSWER) return '產生答案';   // 這不是模組，見 render() 裡的說明
   // MCP 工具的完整名字 mcp__server__tool 塞不進節點，畫面顯示短名，存檔用完整名
   return (META[n.name] && META[n.name].short) || n.name;
 }
@@ -1383,12 +1394,17 @@ function render() {
     const d = document.createElement('div');
     d.className = 'node' + (anchor ? ' anchor' : '') +
                   (m.mcp ? ' mcp' : (m.builtin ? ' ext' : '')) +
-                  (G.sel === n.id ? ' sel' : '');
+                  (G.picked.has(n.id) ? ' sel' : '');
     d.style.left = n.x + 'px';
     d.style.top = n.y + 'px';
     d.dataset.id = n.id;
     d.innerHTML =
       '<div class="n">' + esc(label(n)) + '</div>' +
+      (n.name === ANSWER
+        ? '<div class="d">模型自己寫答案 —— 這不是模組，' +
+          '所以模組庫裡找不到它，也沒得設定。</div>'
+        : n.name === START
+        ? '<div class="d">使用者的問題。</div>' : '') +
       (anchor ? '' :
         '<div class="s">' + esc(m.stage || '') + (m.mcp ? '　MCP · ' + esc(m.server) : '') + '</div>' +
         '<div class="d">' + esc(m.description || '') + '</div>') +
@@ -1443,6 +1459,8 @@ function drawWires() {
   const svg = $('wires');
   svg.innerHTML = '';
   const cv = $('canvas');
+  // 標籤是 div，不在 svg 裡 —— 不先清掉，拖曳時每一格都會留一層，那就是殘影
+  cv.querySelectorAll('.elabel').forEach(el => el.remove());
 
   G.edges.forEach(e => {
     const a = nodeById(e.from), b = nodeById(e.to);
@@ -1457,7 +1475,7 @@ function drawWires() {
     const hit = document.createElementNS(SVGNS, 'path');
     hit.setAttribute('d', p.d);
     hit.setAttribute('class', 'hit');
-    hit.onclick = () => { G.selEdge = e.id; G.sel = null; render(); };
+    hit.onclick = () => { G.selEdge = e.id; G.picked.clear(); render(); };
     svg.appendChild(hit);
 
     const dot = document.createElementNS(SVGNS, 'circle');
@@ -1508,16 +1526,25 @@ $('stage').ondrop = e => {
 function startDragNode(e, n, el) {
   if (e.target.classList.contains('port') || e.target.classList.contains('x')) return;
   e.preventDefault();
-  G.sel = n.id; G.selEdge = null;
-  el.classList.add('sel');
+  G.selEdge = null;
+
+  // 拖一個沒被選到的節點 = 改成只選它。拖已經選到的 = 整組一起搬。
+  if (e.shiftKey || e.metaKey) G.picked.add(n.id);
+  else if (!G.picked.has(n.id)) { G.picked.clear(); G.picked.add(n.id); }
+  render();
+
   const r = $('canvas').getBoundingClientRect();
-  const dx = e.clientX - r.left - n.x, dy = e.clientY - r.top - n.y;
+  const moving = G.nodes.filter(x => G.picked.has(x.id)).map(x => ({ n: x, x0: x.x, y0: x.y }));
+  const sx = e.clientX, sy = e.clientY;
 
   const move = ev => {
-    n.x = Math.max(0, ev.clientX - r.left - dx);
-    n.y = Math.max(0, ev.clientY - r.top - dy);
-    el.style.left = n.x + 'px';
-    el.style.top = n.y + 'px';
+    const ddx = ev.clientX - sx, ddy = ev.clientY - sy;
+    moving.forEach(m => {
+      m.n.x = Math.max(0, m.x0 + ddx);
+      m.n.y = Math.max(0, m.y0 + ddy);
+      const node = $('canvas').querySelector('.node[data-id="' + m.n.id + '"]');
+      if (node) { node.style.left = m.n.x + 'px'; node.style.top = m.n.y + 'px'; }
+    });
     drawWires();
   };
   const up = () => {
@@ -1556,18 +1583,50 @@ function startDragWire(e, from) {
   window.addEventListener('pointerup', up);
 }
 
-$('canvas').onclick = e => {
-  if (e.target.id === 'canvas' || e.target.id === 'wires') {
-    G.sel = G.selEdge = null;
+/* 空白處按住拖 = 框選。這是唯一會在畫布空白處起手的手勢，所以不用跟別的搶。 */
+$('canvas').onpointerdown = e => {
+  if (e.target.id !== 'canvas' && e.target.id !== 'wires') return;
+  e.preventDefault();
+  const r = $('canvas').getBoundingClientRect();
+  const x0 = e.clientX - r.left, y0 = e.clientY - r.top;
+  const add = e.shiftKey || e.metaKey;      // 按著 shift 是加選，不是重新選
+  if (!add) { G.picked.clear(); G.selEdge = null; render(); }
+
+  const box = document.createElement('div');
+  box.className = 'marquee';
+  $('canvas').appendChild(box);
+  let moved = false;
+
+  const move = ev => {
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    if (Math.abs(x - x0) + Math.abs(y - y0) > 4) moved = true;
+    box.style.left = Math.min(x0, x) + 'px';
+    box.style.top = Math.min(y0, y) + 'px';
+    box.style.width = Math.abs(x - x0) + 'px';
+    box.style.height = Math.abs(y - y0) + 'px';
+  };
+  const up = ev => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    box.remove();
+    if (!moved) { render(); return; }      // 只是點一下空白 = 取消選取
+    const L = Math.min(x0, x), R = Math.max(x0, x), T = Math.min(y0, y), B = Math.max(y0, y);
+    G.nodes.forEach(n => {
+      // 碰到就算選到，不用整個框住 —— 要求全包住的框選很難用
+      if (n.x < R && n.x + nodeW(n) > L && n.y < B && n.y + NODE_H > T) G.picked.add(n.id);
+    });
     render();
-  }
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
 };
 
 window.addEventListener('keydown', e => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
   if (G.selEdge) { G.edges = G.edges.filter(x => x.id !== G.selEdge); G.selEdge = null; render(); }
-  else if (G.sel) removeNode(G.sel);
+  else if (G.picked.size) [...G.picked].forEach(removeNode);
 });
 
 /* ══════════ 把圖讀成文字 ══════════ */
@@ -1980,14 +2039,30 @@ $('rGo').onclick = () => {
   const q = $('rq').value.trim();
   if (!q) return rSay('先打一個問題', 'bad');
   const sp = spec();
-  if (!sp.modules.length && !sp.mcp_tools.length) return rSay('畫布上還沒有模組', 'bad');
-  if (!sp.policy) return rSay('policy 是空的 —— agent 會不知道什麼時候用哪個模組', 'bad');
+  const tools = sp.modules.length + sp.builtin_tools.length + sp.mcp_tools.length;
+  if (!tools) return rSay('畫布上還沒有任何工具（模組 / SDK 內建 / MCP 都算）', 'bad');
+
+  // 只放一顆 WebSearch 也要跑得動 —— 那是一個合法而且很好教的工作流。
+  // 沒寫 policy 就拿「這張圖的意思」代跑，但要講清楚代跑的是什麼，
+  // 不然使用者會以為那張圖真的被執行了。
+  let borrowed = false;
+  if (!sp.policy) {
+    sp.policy = compiledPlain();
+    borrowed = true;
+    if (!sp.policy) return rSay('圖是空的，也沒有 policy —— 沒有東西可以跑', 'bad');
+  }
 
   $('rGo').disabled = true;
   $('rTrace').innerHTML = '';
   $('rAns').classList.add('hidden');
   rSay('跑起來了…');
   resetRuns();
+  if (borrowed) {
+    rCard('think',
+      '<b>你沒有寫 policy。</b>這次是拿「這張圖的意思」那段文字代跑的 —— ' +
+      '真正送給 agent 的就是那段字。跑完回「編排設定」把它寫成真的 policy，' +
+      '不然換一個問題它就不會照這張圖走了。');
+  }
 
   fetch('/api/try', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2133,7 +2208,8 @@ $('sFrom').onchange = () => {
     G.nodes = a.graph.nodes.map(n => ({ ...n }));
     G.edges = (a.graph.edges || []).map(e => ({ ...e }));
     G.seq = G.nodes.length + G.edges.length + 2;
-    G.sel = G.selEdge = null;
+    G.picked.clear();
+    G.selEdge = null;
     render();
     $('stage').scrollTo({ left: 0, top: 0 });
     say('載入畫布。改完存成新的一份。');
