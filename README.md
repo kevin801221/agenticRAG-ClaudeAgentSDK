@@ -10,6 +10,9 @@
 
 ---
 
+> 📖 **第一次來的話先讀 [`WALKTHROUGH.md`](WALKTHROUGH.md)** —— 一步一步從 Agent SDK
+> 帶到十四個架構全部組出來。這份 README 是功能參考，適合已經跑過一輪之後回來查。
+
 ## 60 秒跑起來
 
 ```bash
