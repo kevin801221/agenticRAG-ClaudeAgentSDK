@@ -20,7 +20,7 @@ git clone https://github.com/kevin801221/agenticRAG-ClaudeAgentSDK.git
 cd agenticRAG-ClaudeAgentSDK
 cp .env.example .env
 
-uv sync --extra embeddings              # 裝相依（含本地 embedding 套件）
+uv sync --all-extras                    # 裝相依（embedding + chroma + PDF）
 uv run python index_corpus.py           # 建索引（第一次會下載約 100MB 的 e5-small）
 
 ./scripts/setup_kernel.sh               # 註冊 Jupyter kernel（跑 notebook 必做）
@@ -442,7 +442,7 @@ static/index.html  ──►  handle(event)  ◄──  /api/ask     （真的�
 所以改用**頁**當邊界，而且**頁碼會留在片段裡**。
 
 ```bash
-uv sync --extra pdf                    # 裝 pymupdf
+uv sync --all-extras                   # 或只要 PDF：uv sync --extra pdf --extra embeddings
 bash scripts/fetch_papers.sh           # 從 arXiv 抓這套教材引用的 12 篇論文
 uv run python index_corpus.py          # 重建索引
 ```
@@ -625,7 +625,7 @@ tests/               測試（30 項：檢索層 + 架構層）
 
 ```bash
 VECTOR_STORE=numpy    # 預設：向量放記憶體，暴力算 cosine
-VECTOR_STORE=chroma   # 交給 Chroma 管（uv sync --extra chroma）
+VECTOR_STORE=chroma   # 交給 Chroma 管（uv sync --all-extras）
 ```
 
 切換不用重建索引 —— `vectors.npy` 永遠是原始資料，chroma 第一次啟動會自己從它灌進去。

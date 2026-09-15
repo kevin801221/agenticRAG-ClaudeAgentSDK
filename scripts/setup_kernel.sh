@@ -7,7 +7,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-uv sync --extra embeddings
+# 刻意不在這裡跑 uv sync ——「uv sync --extra X」會把不在 X 裡的套件**移除**，
+# 在這支只該註冊 kernel 的腳本裡順手 sync，會默默把 chromadb / pymupdf 拔掉。
+if [ ! -x .venv/bin/python ]; then
+  echo "找不到 .venv。先跑：uv sync --all-extras" >&2
+  exit 1
+fi
 
 uv run python -m ipykernel install --user \
   --name agentic-rag \

@@ -58,7 +58,7 @@ git clone https://github.com/kevin801221/agenticRAG-ClaudeAgentSDK.git
 cd agenticRAG-ClaudeAgentSDK
 cp .env.example .env
 
-uv sync --extra embeddings
+uv sync --all-extras                     # 含 embedding、chroma、PDF
 uv run python index_corpus.py            # 第一次會下載約 100MB 的 e5-small
 
 ./scripts/setup_kernel.sh                # 註冊 Jupyter kernel（要跑 notebook 就一定要這步）
