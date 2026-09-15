@@ -74,21 +74,27 @@ uv run python index_corpus.py            # 第一次會下載約 100MB 的 e5-sm
 **notebook 能不能 `import modules`，跟你「開哪個資料夾」無關，
 只跟「kernel 用的是哪一支 python」有關。**
 
-`scripts/setup_kernel.sh` 會把專案的 `.venv` 註冊成一個具名 kernel。
-跑完之後，Jupyter / VS Code 的 kernel 選單挑這個：
+**兩個編輯器的選單長得不一樣，別找錯東西：**
 
-```
-agentic-rag (.venv, Python 3.13)
-```
+| | 選單上會顯示 | 選哪個 |
+|---|---|---|
+| **VS Code** | 依**路徑**列出它找到的環境 | `Python .venv/bin/python`（寫著 `.venv` 的那個就對了） |
+| **Jupyter Lab** | 依**名字**列出註冊過的 kernel | `agentic-rag (.venv, Python 3.13)` |
 
-四本 notebook 檔案裡已經記著這個名字，所以裝好之後開起來通常就直接是對的。
+VS Code **不會**顯示 `agentic-rag` 這個名字 —— 它有自己的環境探索，
+直接把 `.venv` 當成一個叫 `Python` 的選項列出來。**看到 `.venv/bin/python` 就是對的**，
+不用去找那個名字。（`scripts/setup_kernel.sh` 註冊的名字是給 Jupyter Lab 用的。）
+
+怎麼確認真的對了：跑第一格，它會印出 `sys.executable`。
+只要結尾是 `agentic-rag-workshop/.venv/bin/python`，就沒事了。
 
 | 症狀 | 原因 | 處理 |
 |---|---|---|
-| `ModuleNotFoundError: modules` | kernel 是別的 python | 選 `agentic-rag (.venv, Python 3.13)` |
-| VS Code 說「找不到 kernel」 | 還沒跑 `setup_kernel.sh` | 跑它 |
-| VS Code 自己建了 `notebooks/.venv` | 它自作聰明 | **刪掉那個資料夾**，再選上面那個 kernel |
-| 選單裡一堆長得很像的 Python | 看路徑，要是 `<專案>/.venv/bin/python` | 認路徑不要認名字 |
+| `ModuleNotFoundError: modules` | kernel 是別的 python | 看 `sys.executable` 是不是專案的 `.venv` |
+| VS Code 選單裡找不到 `agentic-rag` | **正常**，VS Code 只認路徑不認名字 | 選 `.venv/bin/python` 那個就對了 |
+| Jupyter Lab 說找不到 kernel | 還沒跑 `setup_kernel.sh` | 跑它 |
+| VS Code 自己建了 `notebooks/.venv` | 它自作聰明 | **刪掉那個資料夾**，再重選 |
+| 選單裡一堆長得很像的 Python | 認路徑不要認名字 | 要 `<專案>/.venv/bin/python` |
 
 ```bash
 uv run jupyter kernelspec list     # 確認它指到專案的 .venv

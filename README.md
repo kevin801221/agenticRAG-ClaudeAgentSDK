@@ -28,7 +28,7 @@ uv run jupyter lab notebooks/           # 教學主體
 uv run uvicorn app:app --reload         # 或看網頁 demo：http://localhost:8000
 ```
 
-kernel 選 **`agentic-rag (.venv, Python 3.13)`**（`setup_kernel.sh` 註冊的那個）。notebook 能不能 `import modules`，**跟你開哪個資料夾無關，只跟 kernel 用哪支 python 有關** —— 這是第一名的卡點，而且錯誤訊息完全不會提到 kernel。
+kernel：**VS Code 選路徑是 `.venv/bin/python` 的那個**（它只認路徑，不會顯示註冊的名字）；**Jupyter Lab 選 `agentic-rag (.venv, Python 3.13)`**。notebook 能不能 `import modules`，**跟你開哪個資料夾無關，只跟 kernel 用哪支 python 有關** —— 這是第一名的卡點，而且錯誤訊息完全不會提到 kernel。
 
 不要讓 VS Code 幫你「建立新環境」—— 它會在 `notebooks/` 底下建一個只有 ipykernel 的空 venv。已經被建出來的話直接刪掉那個資料夾。`.vscode/settings.json` 已經把直譯器指到專案的 `.venv` 了。
 
