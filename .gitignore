@@ -14,8 +14,9 @@ notes/
 # 上傳的文件是使用者自己的，不進 repo
 corpus/uploads/
 
-# 自訂架構是使用者組出來的，預設不進 repo（要分享就手動加）
-architectures/
+# 自訂架構**要**進 repo —— 學生聊出來 / 拖出來的架構就是這堂課的產出，
+# 也是最值得互相看的東西。自己實驗用的丟 architectures/local/。
+architectures/local/
 
 # 軌跡是跑出來的紀錄，預設不進 repo（要當教材就手動加想留的那幾份）
 traces/

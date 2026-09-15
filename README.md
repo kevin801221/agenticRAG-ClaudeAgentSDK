@@ -44,13 +44,17 @@ Agent SDK 底層 spawn 的是 Claude Code CLI —— **CLI 讀什麼憑證，它
 
 ---
 
-## 三本 Notebook（都已執行過，打開就看得到結果）
+## 四本 Notebook（都已執行過，打開就看得到結果）
 
 | Notebook | 內容 | 時長 | 花額度嗎 |
 |---|---|---|---|
 | `01_agent_sdk_basics.ipynb` | Agent SDK 入門：認證、`query()`、`@tool`、hooks 看見 agent 在想什麼 | 40 分 | 少量 |
 | `02_compose_architectures.ipynb` | ⭐ 實跑 Naive / RAG-Fusion / HyDE / CRAG / Self-RAG / Adaptive，最後自己組一個 | 80 分 | 會 |
 | `03_retrieval_internals.ipynb` | 檢索層內部：中文斷詞、三種查法對比、RRF 手算、MMR、要不要裝向量資料庫 | 30 分 | **零 LLM 呼叫** |
+| `04_mcp_and_providers.ipynb` | 接外部 MCP server 當模組、換掉整個後端模型、policy ↔ 圖互轉。**不開網頁** | 30 分 | 會 |
+
+> 04 是給「模組是不是都要我自己寫」和「我公司不能用 Anthropic」這兩題準備的。
+> 網頁上的 Studio / MCP / 供應商切換，在這本裡是純程式碼版本。
 
 ---
 
@@ -589,7 +593,7 @@ mcp_registry.py      外部 MCP server：探測、登記、一鍵從 Claude Code
 traces.py            軌跡錄影與重播（不呼叫 LLM）
 corpus/              範例語料：Claude Code 參考文件（.md）+ papers/（.pdf，用腳本抓）
 scripts/             fetch_papers.sh —— 從 arXiv 抓論文
-notebooks/           三本教學 notebook
+notebooks/           四本教學 notebook
 engines/
   agent_sdk.py       Claude Agent SDK（預設）
   litellm_loop.py    自寫的 tool loop，對照組
