@@ -178,6 +178,42 @@ async def mcp_delete(name: str) -> dict:
     return {"servers": mcp_registry.listing()}
 
 
+FIRST_EVENT_TIMEOUT_S = 120
+
+
+async def sse(queue: asyncio.Queue):
+    """把事件流轉成 SSE，並且盯住「第一個實質事件」有沒有來。
+
+    供應商設錯（base URL 打錯、模型名不對）時，CLI 不會報錯 —— 它會安靜地一直重試。
+    前端就只是轉圈圈，使用者第一反應永遠是「我 policy 是不是寫壞了」，然後找錯地方。
+    所以只在**開頭**掛一個看門狗：第一個工具呼叫或答案進來就拆掉。
+    之後的長時間空白是正常的 —— Self-RAG 想 90 秒也還在跑。
+    """
+    started = False
+    while True:
+        try:
+            event = await asyncio.wait_for(
+                queue.get(), timeout=None if started else FIRST_EVENT_TIMEOUT_S)
+        except TimeoutError:
+            yield _sse({
+                "type": "error", "fatal": True,
+                "text": f"{FIRST_EVENT_TIMEOUT_S} 秒都沒有動靜。"
+                        "多半是 LLM 供應商設錯了（base URL 或模型名不對）—— "
+                        "CLI 遇到這種情況不會報錯，它會安靜地一直重試。"
+                        "到 /studio 點右上角的模型，按「試連看看」確認。",
+            })
+            return
+        if event is None:
+            return
+        if event.get("type") not in ("status", "reasoning"):
+            started = True
+        yield _sse(event)
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
 @app.get("/api/pipeline")
 async def pipeline() -> list[dict]:
     """模組依 Modular RAG 階段分組。前端拿它畫流程圖的骨架。
@@ -543,15 +579,8 @@ async def try_draft(body: dict = Body(...)) -> StreamingResponse:
 
     asyncio.create_task(worker())
 
-    async def stream():
-        while True:
-            event = await queue.get()
-            if event is None:
-                return
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-
     return StreamingResponse(
-        stream(),
+        sse(queue),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -704,15 +733,8 @@ async def compare(q: str, archs: str, scope: str = "", selection: str = "") -> S
 
     asyncio.create_task(worker())
 
-    async def stream():
-        while True:
-            event = await queue.get()
-            if event is None:
-                return
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-
     return StreamingResponse(
-        stream(), media_type="text/event-stream",
+        sse(queue), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
@@ -756,15 +778,8 @@ async def ask(q: str, arch: str = "modular", scope: str = "", selection: str = "
 
     asyncio.create_task(worker())
 
-    async def stream():
-        while True:
-            event = await queue.get()
-            if event is None:
-                return
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-
     return StreamingResponse(
-        stream(),
+        sse(queue),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
