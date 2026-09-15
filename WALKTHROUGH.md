@@ -74,6 +74,28 @@ uv run python index_corpus.py            # 第一次會下載約 100MB 的 e5-sm
 **notebook 能不能 `import modules`，跟你「開哪個資料夾」無關，
 只跟「kernel 用的是哪一支 python」有關。**
 
+#### 最保險的開法：終端機先進 venv，再開 Jupyter Lab
+
+不想跟編輯器的環境探索纏鬥的話，這條路一定對 ——
+**Jupyter 是從這個 venv 裡啟動的，它只找得到這個 venv**：
+
+```bash
+cd ~/agentic-rag-workshop        # ← 一定要是這份，不是別份拷貝
+source .venv/bin/activate
+jupyter lab notebooks/
+```
+
+或者不啟用 venv 也行，`uv` 會自己處理：
+
+```bash
+cd ~/agentic-rag-workshop && uv run jupyter lab notebooks/
+```
+
+**上課建議用這個。** 學生機器上的 VS Code 狀態千奇百怪，
+終端機這條路沒有變數。
+
+#### 在編輯器裡選的話
+
 **兩個編輯器的選單長得不一樣，別找錯東西：**
 
 | | 選單上會顯示 | 選哪個 |

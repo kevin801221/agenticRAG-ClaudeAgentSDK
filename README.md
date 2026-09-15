@@ -24,7 +24,7 @@ uv sync --all-extras                    # 裝相依（embedding + chroma + PDF�
 uv run python index_corpus.py           # 建索引（第一次會下載約 100MB 的 e5-small）
 
 ./scripts/setup_kernel.sh               # 註冊 Jupyter kernel（跑 notebook 必做）
-uv run jupyter lab notebooks/           # 教學主體
+uv run jupyter lab notebooks/           # 教學主體（從 venv 啟動，環境一定對）
 uv run uvicorn app:app --reload         # 或看網頁 demo：http://localhost:8000
 ```
 
