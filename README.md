@@ -64,6 +64,44 @@ Agent SDK 底層 spawn 的是 Claude Code CLI —— **CLI 讀什麼憑證，它
 
 ---
 
+## 為什麼用 Claude Agent SDK，不用 LangChain / LangGraph / Deep Agents
+
+先講清楚：**這四個不是同一層的東西。**
+
+| | 它是什麼 | 一句話比喻 |
+|---|---|---|
+| LangChain | 整合層，幾百個 loader / vectorstore | 零件行 |
+| LangGraph | 狀態機框架，edge 就是控制流 | 自己焊電路板 |
+| Deep Agents | LangChain 焊好的一塊板：規劃 / 子代理 / 虛擬檔案系統 / skills | 焊好的開發板 |
+| **Claude Agent SDK** | 把整台 Claude Code 搬進你的程式 | 整間工具間搬過來 |
+
+**Agent SDK 贏在哪：**
+
+1. **不用 API key** —— 它 spawn 的是 `claude` CLI，本機登入過就吃訂閱額度。
+   三十個學生同時跑，沒有人會收到帳單。其他三個都要先掏一把 key
+2. **內建工具是 Anthropic 幫你跑的** —— `WebSearch` 不用自己實作、不用另外接 Tavily
+3. **權限預設是關的** —— `tools=[]` 全關，白名單才放行，不是先全給再想辦法擋
+4. **hook 是 harness 層攔截** —— 工具真的執行前就能擋下來，不是在 prompt 裡拜託模型自律
+5. **MCP 一等公民** —— 你自己的工具本來就是一個 in-process MCP server
+6. **換模型是改環境變數** —— 模組和 policy 一個字都不用動
+7. **它就是 Claude Code** —— CLI 學的 skills / subagents / hooks 原封不動搬得過來
+
+**它不如人家的地方（更要知道）：**
+
+| 弱點 | 誰比較強 |
+|---|---|
+| 沒有 checkpoint / 時間旅行 / 斷點續跑 | **LangGraph**（每一步存檔，可倒帶改狀態重跑） |
+| 不保證照你畫的流程走 | **LangGraph**（edge 就是控制流，一定照走） |
+| 整合生態系薄 | **LangChain**（幾百個現成 loader） |
+| 調校是為 Claude | 其他三個天生 model-agnostic |
+
+> **LangGraph 是你保證流程，Agent SDK 是你保證準則、它保證應變。**
+> 前者遇到沒想過的情況會卡住，後者會自己轉彎 —— 轉對轉錯看你 policy 寫得好不好。
+
+完整版（含決策表、教學金句）在 [`WALKTHROUGH.md`](WALKTHROUGH.md)。
+
+---
+
 ## 核心概念
 
 ```
