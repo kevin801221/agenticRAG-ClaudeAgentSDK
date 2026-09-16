@@ -142,9 +142,10 @@ agentic-rag-workshop/
 ├── providers.py         換 LLM 供應商（Step 9）
 ├── mcp_registry.py      接別人的 MCP server（Step 9）
 ├── traces.py            軌跡錄影與重播（Step 8）
+├── inspect_store.py     看得見的向量空間：384 維壓成 2D（純 numpy）
 ├── notebooks/           四本，主教材
 ├── app.py + static/     網頁：流程圖、文件工作台、/studio 畫布
-└── tests/               45 項，不花 LLM 額度
+└── tests/               50 項，不花 LLM 額度
 ```
 
 **notebook 是主教材，網頁是看得見的版本。** 兩邊共用同一份 `modules.py` ——
@@ -412,6 +413,10 @@ print(run.n_calls, "次呼叫", run.elapsed_s, "秒")
 ### 建議的順序與看點
 
 1. **Naive** 先跑，當基準線。記住它的呼叫次數和耗時。
+> 🔍 **跑之前先開左邊抽屜的「向量」那一格看一眼。** 你會看到中文教材和英文論文
+> 在向量空間裡是**兩團完全分開的東西** —— 這解釋了接下來每一個「撈回不相關片段」
+> 的案例。跑完一題再按「標出上一題引用到的」，看證據是擠在一團還是散開。
+
 2. **HyDE** —— 這個最容易「看到差別」。故意用口語問題（「那個會擋東西的功能」），
    Naive 會撈不到，HyDE 因為先寫了一段用術語的假答案就撈得到。
    **沒建向量索引的話 HyDE 會很爛** —— 那也值得看一次，它會退回 BM25。
