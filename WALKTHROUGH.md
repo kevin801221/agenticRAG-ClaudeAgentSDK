@@ -143,9 +143,10 @@ agentic-rag-workshop/
 ├── mcp_registry.py      接別人的 MCP server（Step 9）
 ├── traces.py            軌跡錄影與重播（Step 8）
 ├── inspect_store.py     看得見的向量空間：384 維壓成 2D（純 numpy）
+├── graph_store.py       Neo4j：同一批片段的另一種索引（選用，Step 9）
 ├── notebooks/           四本，主教材
 ├── app.py + static/     網頁：流程圖、文件工作台、/studio 畫布
-└── tests/               50 項，不花 LLM 額度
+└── tests/               53 項，不花 LLM 額度
 ```
 
 **notebook 是主教材，網頁是看得見的版本。** 兩邊共用同一份 `modules.py` ——
@@ -591,6 +592,21 @@ mcp__context7__query-docs       ← 別人的 MCP server
 ⚠️ **外部來源的出處必須跟知識庫分開標**（`[mcp: 工具名]` vs `[檔名#編號]`）。
 只要架構有 `mcp_tools`，這條規則會自動加進 system prompt。
 混在一起比沒有出處更危險，因為它看起來很可信。
+
+### 另一種資料源：知識圖譜（選用）
+
+接了 Neo4j 之後，`scripts/seed_neo4j.py` 會把**現有索引**灌成一張圖，
+然後多一個模組 `graph_neighbors` 可以拖進架構裡。
+
+> **教學金句**：「向量看到的是雲，圖看到的是骨架。同一批片段、兩種索引，
+> 能回答的問題就不一樣 —— 向量答『跟這句最像的是誰』，圖答『它跟誰有關係』。」
+
+跨檔相似邊是重點：同一份文件裡相鄰的兩塊本來就像，連起來沒有資訊量。
+這份語料實際長出 357 條跨檔邊，其中 `01-hooks.md ↔ 10-troubleshooting.md` 有 10 條 ——
+**hook 的坑都寫在疑難排解裡，那是純向量檢索看不出來的關係。**
+
+⚠️ 給 agent 的 Cypher 有唯讀護欄。這點要講：不是不信任模型，
+是 **policy 寫錯一個字就可能清掉教室的資料庫，而且要到下一堂課才會發現**。
 
 ### 換供應商：點一下，不用重開
 

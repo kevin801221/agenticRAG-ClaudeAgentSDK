@@ -251,6 +251,48 @@ def list_corpus(ix: Index) -> dict:
 # 模組註冊表
 # ═══════════════════════════════════════════════════════════
 
+def graph_neighbors(ix: Index, chunk_id: str, hops: int = 1) -> dict:
+    """[Post-retrieval] 從圖上看這個片段的鄰居：原文前後 + **跨檔**講同一件事的片段。
+
+    跟 expand 的差別很重要：expand 只看同一份文件的前後，
+    graph_neighbors 看得到「這個概念在別的文件裡也出現過」——
+    那是向量檢索撈得到、但你看不出關聯的東西。
+
+    圖沒接的話回一個說明就好，不要爆掉。整個系統不該因為少一個資料源就不能跑。
+    """
+    import graph_store
+
+    if not graph_store.configured():
+        return {"error": "沒有接圖資料庫（NEO4J_URI 沒設）。這個架構需要它，換一個架構或先接上。"}
+    try:
+        rows = graph_store.run(
+            """
+            MATCH (c:Chunk {id: $id})
+            OPTIONAL MATCH (c)-[:NEXT]-(n:Chunk)<-[:HAS_CHUNK]-(fn:File)
+            OPTIONAL MATCH (c)-[s:SIMILAR]-(m:Chunk)<-[:HAS_CHUNK]-(fm:File)
+            RETURN
+              true AS found,
+              collect(DISTINCT {id: n.id, path: fn.path, heading: n.heading, rel: 'NEXT'}) AS nexts,
+              collect(DISTINCT {id: m.id, path: fm.path, heading: m.heading,
+                                rel: 'SIMILAR', score: s.score}) AS sims
+            """,
+            id=chunk_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"圖查詢失敗：{type(exc).__name__}: {exc}"}
+
+    if not rows or not rows[0].get("found"):
+        return {"error": f"圖上沒有這個片段：{chunk_id}。"
+                         f"id 要長得像 01-hooks.md#2，而且要先跑過 scripts/seed_neo4j.py。"}
+    nexts = [r for r in rows[0]["nexts"] if r.get("id")]
+    sims = sorted([r for r in rows[0]["sims"] if r.get("id")],
+                  key=lambda r: -(r.get("score") or 0))
+    out = {"of": chunk_id, "in_document": nexts, "across_documents": sims[: max(1, hops) * 5]}
+    if not sims:
+        out["hint"] = "這一塊沒有跨檔連結 —— 它講的東西只出現在自己這份文件裡。"
+    return out
+
+
 # Modular RAG 的階段順序。放在這裡而不是 app.py —— 階段是模組的分類，
 # 流程圖、拖拉組裝台的車道、測試都靠它，不是某個網頁端點的私有常數。
 STAGE_ORDER = ["Indexing", "Pre-retrieval", "Retrieval", "Post-retrieval"]
@@ -351,6 +393,23 @@ MODULES: dict[str, dict[str, Any]] = {
             "required": ["chunk_id"],
         },
     },
+    "graph_neighbors": {
+        "stage": "Post-retrieval",
+        "fn": graph_neighbors,
+        "description": (
+            "從知識圖譜看某片段的鄰居：原文前後，以及**其他文件裡**在講同一件事的片段。"
+            "跟 expand 的差別是它跨得出這份文件。想知道「這個概念別的地方有沒有提過」時用。"
+            "需要接 Neo4j，沒接會回一個說明而不是壞掉。"
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "chunk_id": {"type": "string"},
+                "hops": {"type": "integer", "description": "拿幾圈鄰居，預設 1"},
+            },
+            "required": ["chunk_id"],
+        },
+    },
     "diversify": {
         "stage": "Post-retrieval",
         "fn": diversify,
@@ -413,6 +472,7 @@ BUILTIN_NOTE = """# {name} 是 Claude Agent SDK 的內建工具，不是這個�
 # 內建工具由 Anthropic 那端執行，所以你看不到它的原始碼 ——
 # 但 PreToolUse hook 一樣攔得到，軌跡上照樣看得見它查了什麼。
 """
+
 
 
 def module_source(name: str) -> str:

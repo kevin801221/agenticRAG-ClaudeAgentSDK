@@ -202,3 +202,57 @@ def test_a_workflow_with_only_a_builtin_tool_is_legal():
         "name": "什麼都沒有", "policy": "亂寫", "modules": [],
     })
     assert not ok and "工具" in why
+
+
+# ══════════ 圖資料庫 ══════════
+
+
+def test_cypher_guard_blocks_writes():
+    """給 agent 的那個工具只能讀。
+
+    不是信任問題 —— 是 policy 寫錯一個字就可能把教室的資料庫清掉，
+    而那個錯誤要到下一堂課才會被發現。
+    """
+    import graph_store
+
+    for bad in (
+        "MATCH (n) DETACH DELETE n",
+        "CREATE (n:Chunk {id: 'x'})",
+        "MATCH (n) SET n.x = 1",
+        "MERGE (n:File {path: 'x'})",
+        "CALL apoc.periodic.iterate('MATCH (n) RETURN n', 'DELETE n', {})",
+        "LOAD CSV FROM 'file:///x.csv' AS row RETURN row",
+        "DROP CONSTRAINT chunk_id",
+    ):
+        ok, why = graph_store.read_only(bad)
+        assert not ok, f"這句應該被擋下來：{bad}"
+        assert why
+
+    for good in (
+        "MATCH (c:Chunk) RETURN c LIMIT 5",
+        "  match (a)-[:SIMILAR]->(b) return a.id, b.id  ",
+        "WITH 1 AS x RETURN x",
+    ):
+        ok, why = graph_store.read_only(good)
+        assert ok, f"這句應該放行：{good}（{why}）"
+
+
+def test_graph_says_so_instead_of_crashing_when_not_configured(monkeypatch):
+    """沒接圖不能讓整個系統掛掉 —— 它只是少一個資料源。"""
+    import graph_store
+
+    for k in ("NEO4J_URI", "NEO4J_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
+    assert not graph_store.configured()
+    assert graph_store.describe() == {"ok": False, "why": "沒有設定 NEO4J_URI / NEO4J_PASSWORD"}
+    assert not graph_store.subgraph()["ok"]
+
+
+def test_graph_module_returns_an_error_dict_not_an_exception(monkeypatch):
+    """模組回錯誤字典，agent 看得懂也能自己換路 —— 丟例外的話整輪問答就死了。"""
+    import modules as M
+
+    for k in ("NEO4J_URI", "NEO4J_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
+    out = M.graph_neighbors(None, "01-hooks.md#0")
+    assert "error" in out and "NEO4J_URI" in out["error"]

@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 load_dotenv()
 
 import architect  # noqa: E402
+import graph_store  # noqa: E402
 import inspect_store  # noqa: E402
 import mcp_registry  # noqa: E402
 import providers  # noqa: E402
@@ -241,6 +242,12 @@ async def pipeline() -> list[dict]:
                  "description": t["description"], "builtin": False, "mcp": True}
             )
     return [{"stage": s, "modules": grouped[s]} for s in STAGE_ORDER]
+
+
+@app.get("/api/graph")
+async def graph() -> dict:
+    """圖資料庫的體檢表 + 一塊可以畫的子圖。沒接圖就回 ok:false，前端自己收掉那一格。"""
+    return {"describe": graph_store.describe(), "subgraph": graph_store.subgraph()}
 
 
 @app.get("/api/vecmap")

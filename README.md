@@ -318,6 +318,57 @@ Studio 頂上那個「模型：…」點下去：
 > 問答那邊就只是轉圈圈 —— 學生會以為是自己的 policy 寫壞了。
 > 這顆按鈕會發一句「回答 OK」，60 秒沒回應就明講是 base URL 或 token 的問題。
 
+### 知識圖譜（選用，接 Neo4j）
+
+抽屜第五格「圖譜」。**同一批片段，換一種索引方式。**
+
+```
+向量看到的是「雲」            圖看到的是「骨架」
+每個片段是空間裡一個點        (:File)-[:HAS_CHUNK]->(:Chunk)
+關係只有「距離」              (:Chunk)-[:NEXT]->(:Chunk)        原文順序
+                              (:Chunk)-[:SIMILAR {score}]->     跨檔才連
+```
+
+跑 `scripts/seed_neo4j.py` 把**現有的索引**灌成圖（不引進新資料集）。
+實際跑出來：217 個節點、755 條關係，其中 **357 條跨檔相似邊**。
+
+**為什麼 SIMILAR 只連跨檔**：同一份文件裡相鄰的兩塊本來就像，連起來沒有資訊量，
+只會讓圖變成毛球。跨檔的相似才有意思 —— **同一個概念出現在兩份不同文件裡**，
+那正是向量檢索會撈到、但你看不出關聯的東西。
+
+實際長出來的關聯（這份語料）：
+
+| 條數 | 哪兩份 | 合理嗎 |
+|---|---|---|
+| 204 | `crag.pdf` ↔ `self-rag.pdf` | 合理，兩篇 RAG 論文本來就在講同一批東西 |
+| 11 | `09-rag-patterns.md` ↔ `10-troubleshooting.md` | 合理 |
+| **10** | `01-hooks.md` ↔ `10-troubleshooting.md` | **這條有用** —— hook 的坑都寫在疑難排解裡 |
+
+新增模組 **`graph_neighbors`**（Post-retrieval）。跟 `expand` 的差別是它**跨得出這份文件**：
+
+```
+expand           → 同一份文件的前後鄰居
+graph_neighbors  → 前後鄰居 ＋ 其他文件裡在講同一件事的片段
+```
+
+這就是 GraphRAG 想解決的問題：向量檢索撈回來的片段彼此是孤立的，你拿不到它們之間的關係。
+
+**安全**：給 agent 的查詢有唯讀護欄（擋掉 `CREATE` / `DELETE` / `SET` / `CALL apoc` …）。
+不是信任問題 —— 是 policy 寫錯一個字就可能把教室的資料庫清掉，而那個錯誤要到下一堂課才會被發現。
+
+**沒接也完全不影響**：`.env` 沒設 `NEO4J_URI` 就不會出現這一格，其他功能照常。
+
+```bash
+docker run -d --name neo4j-teach -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/你的密碼 neo4j:5
+uv sync --all-extras
+# .env 設 NEO4J_URI / NEO4J_PASSWORD
+uv run python scripts/seed_neo4j.py
+```
+
+圖的畫法是自己寫的 Fruchterman-Reingold（約 40 行 canvas），**沒有用任何函式庫** ——
+教室離線時 CDN 抓不到。
+
 ### 看得見的向量空間
 
 抽屜第四格「向量」。整個語料庫的 384 維壓成兩維畫出來，一個點是一個片段，顏色是檔案。
@@ -677,6 +728,7 @@ providers.py         LLM 供應商：OAuth / API key / 相容端點 / Bedrock / 
 mcp_registry.py      外部 MCP server：探測、登記、一鍵從 Claude Code 匯入
 traces.py            軌跡錄影與重播（不呼叫 LLM）
 inspect_store.py     向量庫體檢 + 384 維壓成 2D（純 numpy，零額外相依）
+graph_store.py       Neo4j：連線、唯讀護欄、schema 與子圖（選用）
 corpus/              範例語料：Claude Code 參考文件（.md）+ papers/（.pdf，用腳本抓）
 scripts/             fetch_papers.sh —— 從 arXiv 抓論文
 notebooks/           四本教學 notebook

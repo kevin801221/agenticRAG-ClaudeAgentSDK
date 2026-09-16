@@ -30,6 +30,9 @@ chroma = [
 pdf = [
     "pymupdf>=1.28.2",
 ]
+graph = [
+    "neo4j>=5.28",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
