@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>資料源檢視器 — 向量空間與知識圖譜</title>
+<style>
+  :root{
+    --ground:#151B2B; --panel:#1E2639; --panel-2:#232C42; --rail:#33405C;
+    --ink:#EEF1F8; --muted:#8B96B3;
+    --signal:#F2B441; --alert:#FF7A6B; --ok:#6FD3A8; --ext:#8FA8FF;
+    --mono:"Menlo","SF Mono",ui-monospace,monospace;
+    --sans:"Avenir Next","Helvetica Neue",-apple-system,"PingFang TC","Noto Sans TC",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.6;display:flex;flex-direction:column;overflow:hidden}
+  button{font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer;
+    background:var(--signal);color:#1A1205;border:0;border-radius:4px;padding:.3rem .9rem}
+  button:hover{filter:brightness(1.08)}
+  .ghost{background:none;color:var(--muted);border:1px solid var(--rail);font-weight:400}
+  .ghost:hover{color:var(--ink);border-color:var(--signal);filter:none}
+  a{color:var(--signal)}
+
+  header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;flex:0 0 auto;
+    padding:.6rem 1.2rem;border-bottom:1px solid var(--rail);background:var(--panel)}
+  header h1{font-size:1rem;margin:0}
+  header .claim{font-size:.8rem;color:var(--muted);border-left:2px solid var(--signal);
+    padding-left:.7rem;max-width:34rem;line-height:1.45}
+  header .claim b{color:var(--signal)}
+  header .spacer{flex:1}
+  .tabs{display:flex;gap:.3rem}
+  .tabs button{background:none;color:var(--muted);border:1px solid var(--rail);font-weight:400}
+  .tabs button.on{color:var(--signal);border-color:var(--signal);font-weight:600}
+
+  main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
+  .stage{position:relative;display:flex;align-items:center;justify-content:center;
+    padding:1rem;min-width:0;overflow:auto}
+  .side{border-left:1px solid var(--rail);background:var(--panel);overflow-y:auto;
+    padding:1rem 1.1rem 2rem;display:flex;flex-direction:column;gap:.6rem}
+  .side h2{font-size:.9rem;margin:0}
+  .side .lede{font-size:.8rem;color:var(--muted);margin:0;line-height:1.65}
+
+  canvas{background:#11162a;border:1px solid var(--rail);border-radius:6px;
+    max-width:100%;height:auto}
+  #vecmap{cursor:crosshair}
+  #graphmap{cursor:default}
+
+  .vectip{position:absolute;pointer-events:none;z-index:3;max-width:17rem;
+    background:var(--ground);border:1px solid var(--signal);border-radius:4px;
+    padding:.3rem .55rem;font-size:.75rem;line-height:1.5}
+  .vectip .p{font-family:var(--mono);font-size:.68rem;color:var(--muted)}
+
+  .veclegend{display:flex;flex-wrap:wrap;gap:.25rem .7rem}
+  .veclegend span{font-family:var(--mono);font-size:.7rem;color:var(--muted);
+    display:flex;align-items:center;gap:.3rem}
+  .veclegend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .vecstat,.gstat{display:grid;grid-template-columns:1fr 1fr;gap:.3rem .7rem;
+    font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+  .vecstat b,.gstat b{color:var(--ink);font-weight:600}
+  .vecwarn{border-left:2px solid var(--alert);padding:.4rem .7rem;font-size:.78rem;
+    line-height:1.65;background:rgba(255,122,107,.06)}
+  .vecwarn b{color:var(--alert)}
+  .vecrow{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+  .vecrow button{padding:.15rem .6rem;font-size:.74rem;font-weight:400;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .vecrow button:hover{color:var(--signal);border-color:var(--signal)}
+  .vecrow button.on{color:var(--signal);border-color:var(--signal)}
+  .vecnb{font-family:var(--mono);font-size:.72rem;line-height:1.85;color:var(--muted)}
+  .vecnb b{color:var(--ink)}
+  .gschema{font-family:var(--mono);font-size:.74rem;line-height:1.9;color:var(--muted)}
+  .gschema b{color:var(--ok)}
+  .gnone{border-left:2px solid var(--rail);padding:.4rem .7rem;font-size:.8rem;
+    color:var(--muted);line-height:1.7}
+  .gnone code{color:var(--ink)}
+  .model{font-family:var(--mono);font-size:.72rem;color:var(--muted);line-height:1.8}
+  .model b{color:var(--ink)}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>資料源檢視器</h1>
+  <p class="claim" id="claim"></p>
+  <span class="spacer"></span>
+  <div class="tabs">
+    <button type="button" id="tabVec" class="on">向量空間</button>
+    <button type="button" id="tabGraph">知識圖譜</button>
+  </div>
+  <a href="/" class="ghost" style="text-decoration:none;padding:.3rem .9rem;border-radius:4px;font-size:.85rem">回主畫面</a>
+</header>
+
+<main>
+  <section class="stage">
+    <canvas id="vecmap" width="900" height="900"></canvas>
+    <canvas id="graphmap" width="900" height="820" class="hidden"></canvas>
+  </section>
+
+  <section class="side">
+    <!-- 向量 -->
+    <div id="paneVec">
+      <h2>向量空間</h2>
+      <p class="lede">一個點是一個片段，顏色是檔案。滑過去看是誰，點下去看它在空間裡的鄰居。</p>
+      <div class="vecrow" style="margin:.6rem 0">
+        <button type="button" id="vecCites">標出上一題引用到的</button>
+        <button type="button" id="vecReload">重新載入</button>
+      </div>
+      <div class="model" id="vecModel"></div>
+      <div class="veclegend" id="vecLegend" style="margin:.6rem 0"></div>
+      <div class="vecstat" id="vecStat"></div>
+      <div class="vecwarn" id="vecWarn" style="margin:.6rem 0"></div>
+      <div class="vecnb" id="vecNb"></div>
+    </div>
+
+    <!-- 圖譜 -->
+    <div id="paneGraph" class="hidden">
+      <h2>知識圖譜</h2>
+      <p class="lede">同一批片段的另一種索引。這裡只畫<strong>跨檔案</strong>的相似關係 ——
+        也就是同一個概念出現在兩份不同文件裡。</p>
+      <div class="vecrow" style="margin:.6rem 0">
+        <button type="button" id="gReheat">重新排一次</button>
+        <button type="button" id="gReload">重新載入</button>
+      </div>
+      <div class="veclegend" id="gLegend" style="margin:.6rem 0"></div>
+      <div class="gstat" id="gStat"></div>
+      <div class="gschema" id="gSchema" style="margin:.5rem 0"></div>
+      <div class="vecnb" id="gTip"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+</script>
+<script src="/static/viz.js"></script>
+<script>
+/* 這一頁只是把抽屜裡那兩格放大。畫法完全共用 static/viz.js ——
+   複製一份出來改，兩邊遲早會不一樣。 */
+
+function show(which) {
+  const vec = which === 'vec';
+  $('vecmap').classList.toggle('hidden', !vec);
+  $('graphmap').classList.toggle('hidden', vec);
+  $('paneVec').classList.toggle('hidden', !vec);
+  $('paneGraph').classList.toggle('hidden', vec);
+  $('tabVec').classList.toggle('on', vec);
+  $('tabGraph').classList.toggle('on', !vec);
+  $('claim').innerHTML = vec
+    ? '<b>這是一張 384 維的影子。</b>圖上很近不代表檢索一定撈得到 —— 看右邊那個解釋變異量。'
+    : '<b>向量看到的是「雲」，圖看到的是「骨架」。</b>同一批片段、兩種索引，能回答的問題不一樣。';
+  fitCanvas();
+  if (vec && !VEC.data) vecLoad().then(showModel);
+  if (!vec && !GR.data) gLoad();
+  location.hash = which;
+}
+
+/** 順便把「到底是誰做的向量化」寫在畫面上 —— 這是最常被問的一題 */
+function showModel() {
+  fetch('/api/health').then(r => r.json()).then(h => {
+    const o = (VEC.data && VEC.data.overview) || {};
+    $('vecModel').innerHTML =
+      'embedding 模型　<b>' + esc(h.embedding_model || '（未回報）') + '</b><br>' +
+      '維度　<b>' + (o.dims || '—') + '</b>　·　裝置 <b>' + esc(h.embedding_device || '—') + '</b><br>' +
+      '向量庫　<b>' + esc(o.store || '—') + '</b>　·　片段 <b>' + (o.chunks || 0) + '</b>';
+  });
+}
+
+/** 畫布尺寸跟著視窗走。固定 900×900 在筆電上會被切掉一半，那張圖就白畫了。 */
+function fitCanvas() {
+  const box = document.querySelector('.stage').getBoundingClientRect();
+  const side = 32;                                   // .stage 的 padding
+  const w = Math.max(320, Math.floor(box.width - side));
+  const h = Math.max(320, Math.floor(box.height - side));
+  const n = Math.min(w, h);                          // 正方形，散點才不會被拉歪
+  [$('vecmap'), $('graphmap')].forEach(cv => {
+    if (cv.width === n && cv.height === n) return;
+    cv.width = n; cv.height = n;
+  });
+  if (VEC.data) vecPaint();
+  if (GR.data && GR.pos.length) gPaint();
+}
+window.addEventListener('resize', fitCanvas);
+
+$('tabVec').onclick = () => show('vec');
+$('tabGraph').onclick = () => show('graph');
+fitCanvas();
+show(location.hash.replace('#', '') === 'graph' ? 'graph' : 'vec');
+</script>
+</body>
+</html>

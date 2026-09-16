@@ -318,6 +318,22 @@ Studio 頂上那個「模型：…」點下去：
 > 問答那邊就只是轉圈圈 —— 學生會以為是自己的 policy 寫壞了。
 > 這顆按鈕會發一句「回答 OK」，60 秒沒回應就明講是 base URL 或 token 的問題。
 
+### 資料源檢視器：`/inspect`
+
+向量空間和知識圖譜各有一張**獨立的整頁**（抽屜裡那兩格是縮圖預覽，點標題旁的
+「↗ 開獨立一頁」開大的）。畫布會跟著視窗大小自己縮放。
+
+畫面上直接寫著**這些向量是誰做的**（最常被問的一題）：
+
+```
+embedding 模型　intfloat/multilingual-e5-small
+維度　384　·　裝置 mps
+向量庫　numpy　·　片段 205
+```
+
+換模型：`.env` 設 `EMBEDDING_MODEL=`，然後**重建索引**（換了模型舊向量就作廢，
+新舊片段在不同空間裡算出來的相似度是垃圾 —— 這是 Step 7 說過「不交給 agent 決定」的那件事）。
+
 ### 知識圖譜（選用，接 Neo4j）
 
 抽屜第五格「圖譜」。**同一批片段，換一種索引方式。**
@@ -738,6 +754,8 @@ engines/
 app.py               FastAPI + SSE
 static/index.html    單檔前端，無建置
 static/studio.html   畫布版組裝台（/studio），也是單檔
+static/inspect.html  資料源檢視器（/inspect）：向量空間 + 知識圖譜
+static/viz.js        兩張圖的畫法，主畫面與 /inspect 共用
 tests/               測試（30 項：檢索層 + 架構層）
 ```
 

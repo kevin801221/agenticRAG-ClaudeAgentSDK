@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -28,6 +29,7 @@ import providers  # noqa: E402
 import traces  # noqa: E402
 from engines import check_config, describe_engine, get_engine  # noqa: E402
 from modules import ARCHITECTURES, BUILTIN_TOOLS, MODULES, STAGE_ORDER  # noqa: E402
+import retrieval  # noqa: E402
 from retrieval import load_index  # noqa: E402
 
 # 使用者自己組的架構跟內建的平起平坐 —— 它們是同一種東西（一份 Architecture）
@@ -52,10 +54,31 @@ async def home() -> FileResponse:
     return FileResponse(HERE / "static" / "index.html")
 
 
+# 前端本來是單檔，viz.js 是唯一一個外部檔 —— 抽出來是因為主畫面和 /inspect 都要用，
+# 同一套畫法複製兩份，改一邊忘另一邊是遲早的事。
+app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+
+
+@app.get("/inspect")
+async def inspect_page() -> FileResponse:
+    """向量空間與知識圖譜的獨立頁。抽屜裡那兩格是預覽，這裡才看得清楚。"""
+    return FileResponse(HERE / "static" / "inspect.html")
+
+
 @app.get("/studio")
 async def studio() -> FileResponse:
     """畫布版的組裝台。獨立一頁是因為它要整個畫面 —— 塞在側欄裡拖不開。"""
     return FileResponse(HERE / "static" / "studio.html")
+
+
+def _embedding_device() -> str:
+    """回報向量是在哪跑的。Mac 上是 MPS，沒有就 CPU —— 現場常常有人問為什麼這麼快。"""
+    try:
+        import torch
+
+        return "mps" if torch.backends.mps.is_available() else "cpu"
+    except Exception:  # noqa: BLE001 — 純 BM25 模式不會有 torch
+        return "cpu"
 
 
 @app.get("/api/health")
@@ -68,6 +91,10 @@ async def health() -> dict:
         "files": len({c.path for c in INDEX.chunks}),
         "has_vectors": INDEX.has_vectors,
         "vector_store": INDEX.store_kind,
+        # 「這些向量是誰做的」是最常被問的一題，直接回報，不要讓人去翻程式碼
+        "embedding_model": (os.getenv("EMBEDDING_MODEL", retrieval.DEFAULT_EMBEDDING_MODEL)
+                            if INDEX.has_vectors else ""),
+        "embedding_device": _embedding_device() if INDEX.has_vectors else "",
         "built_at": INDEX.built_at,
     }
 
