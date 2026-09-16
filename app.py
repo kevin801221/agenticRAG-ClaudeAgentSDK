@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 load_dotenv()
 
 import architect  # noqa: E402
+import inspect_store  # noqa: E402
 import mcp_registry  # noqa: E402
 import providers  # noqa: E402
 import traces  # noqa: E402
@@ -240,6 +241,22 @@ async def pipeline() -> list[dict]:
                  "description": t["description"], "builtin": False, "mcp": True}
             )
     return [{"stage": s, "modules": grouped[s]} for s in STAGE_ORDER]
+
+
+@app.get("/api/vecmap")
+async def vecmap() -> dict:
+    """向量庫的體檢表 + 384 維壓成 2D 的投影。
+
+    存在的理由是教學：學生以為「向量檢索會找到意思相近的」，
+    直到看見中文教材和英文論文在空間裡是兩團完全分開的東西。
+    """
+    return {"overview": inspect_store.overview(INDEX), "map": inspect_store.projection(INDEX)}
+
+
+@app.get("/api/neighbors")
+async def neighbors(id: str, k: int = 8) -> dict:
+    """某個片段在向量空間裡的鄰居 —— 用來回答「為什麼這題會撈到那一塊」。"""
+    return inspect_store.neighbors(INDEX, id, max(1, min(k, 30)))
 
 
 @app.get("/api/corpus")

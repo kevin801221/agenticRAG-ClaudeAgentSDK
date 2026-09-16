@@ -314,3 +314,108 @@ def test_markdown_chunks_have_no_page(tmp_path):
     chunks = chunk_markdown("# 標題\n\n" + "內容。" * 60, "a.md")
 
     assert all(c.page is None for c in chunks), "markdown 沒有頁碼概念"
+
+
+# ══════════ 向量庫檢視器 ══════════
+
+
+@pytest.fixture
+def vix(ix, tmp_path):
+    """有向量的索引，但**不下載模型** —— 向量是造出來的。
+
+    inspect_store 要測的是投影和統計的數學，不是 embedding 的品質。
+    用假向量測，離線也跑得動，而且不會因為換模型就整組變紅。
+    每個檔案給一個不同的中心，投影出來才該分得開。
+    """
+    import numpy as np
+
+    import retrieval as R
+
+    rng = np.random.default_rng(0)
+    paths = sorted({c.path for c in ix.chunks})
+    centers = {p: rng.normal(size=16) * 3 for p in paths}
+    V = np.asarray(
+        [centers[c.path] + rng.normal(size=16) * 0.2 for c in ix.chunks], dtype="float32"
+    )
+    ix.store = R.build_store("numpy", ix.chunks, V, tmp_path)
+    ix.encode = lambda texts: np.asarray(
+        [rng.normal(size=16) for _ in texts], dtype="float32"
+    )
+    import inspect_store
+
+    inspect_store._CACHE.clear()
+    yield ix
+    inspect_store._CACHE.clear()
+
+
+def test_projection_is_a_shadow_and_says_so(vix):
+    """投影一定要回報解釋變異量。
+
+    兩個軸通常只解釋 20-30%，不講清楚的話學生會把「圖上很近」
+    當成「檢索一定撈得到」—— 那是這張圖唯一可能造成的傷害。
+    """
+    import inspect_store
+
+    p = inspect_store.projection(vix)
+    assert p["ok"]
+    assert len(p["points"]) == len(vix.chunks)
+    assert 0 < p["explained"] <= 1
+    # 座標要**填滿** [-1, 1]，前端才不用管尺度（只檢查「沒超出」的話，
+    # 把縮放拿掉也驗不出來 —— 這是第一版寫得太鬆的地方）
+    xs = [q["x"] for q in p["points"]] + [q["y"] for q in p["points"]]
+    assert max(abs(v) for v in xs) == pytest.approx(1.0, abs=1e-3)
+    assert all(-1.0001 <= v <= 1.0001 for v in xs)
+    # 檔案編號要對得回檔名
+    assert all(0 <= q["f"] < len(p["files"]) for q in p["points"])
+
+
+def test_projection_is_cached(vix):
+    """算一次 SVD 就好。每次切到那一頁都重算的話，大語料會卡住。"""
+    import inspect_store
+
+    a = inspect_store.projection(vix)
+    b = inspect_store.projection(vix)
+    assert a is b
+
+
+def test_projection_degrades_without_vectors(ix):
+    """純 BM25 模式不能爆掉 —— 那是教室沒網路時的預設狀態。
+
+    has_vectors 是唯讀 property（它看的是 store 有沒有東西），
+    所以這裡做一個「假裝自己是 Index 但沒有向量」的替身，而不是去改真的那一個。
+    """
+    import inspect_store
+
+    class NoVectors:
+        has_vectors = False
+        chunks = ix.chunks
+        built_at = ix.built_at
+
+    inspect_store._CACHE.clear()
+    p = inspect_store.projection(NoVectors())
+    assert not p["ok"] and "沒有向量" in p["why"]
+    inspect_store._CACHE.clear()
+
+
+def test_overview_reports_the_similarity_floor(vix):
+    """平均相似度是個很重要的數字：e5 把什麼東西都放在 0.8 上下，
+    所以「相似度 0.85」單看沒有意義。要教這件事就得先量出來。"""
+    import inspect_store
+
+    o = inspect_store.overview(vix)
+    assert o["chunks"] == len(vix.chunks)
+    assert o["files"] > 0
+    assert o["chars"]["min"] <= o["chars"]["p50"] <= o["chars"]["max"]
+    assert 0 < o["mean_similarity"] < 1
+    assert o["dims"] == 16
+
+
+def test_neighbors_excludes_itself_and_rejects_bad_id(vix):
+    import inspect_store
+
+    target = vix.chunks[0].id
+    n = inspect_store.neighbors(vix, target, k=5)
+    assert n["ok"]
+    assert target not in [x["id"] for x in n["neighbors"]]
+    assert n["neighbors"] == sorted(n["neighbors"], key=lambda x: -x["sim"])
+    assert not inspect_store.neighbors(vix, "沒有這個片段#99")["ok"]

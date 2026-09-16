@@ -289,6 +289,33 @@
   }
   .chip:hover{border-color:var(--signal);color:var(--ink)}
 
+  /* ── 向量空間 ── */
+  .vecwrap{position:relative;border:1px solid var(--rail);border-radius:5px;background:#11162a}
+  #vecmap{display:block;width:100%;height:auto;cursor:crosshair}
+  .vectip{
+    position:absolute;pointer-events:none;z-index:3;max-width:15rem;
+    background:var(--ground);border:1px solid var(--signal);border-radius:4px;
+    padding:.3rem .5rem;font-size:.72rem;line-height:1.5;
+  }
+  .vectip .p{font-family:var(--mono);font-size:.66rem;color:var(--muted)}
+  .veclegend{display:flex;flex-wrap:wrap;gap:.25rem .6rem;margin:.5rem 0}
+  .veclegend span{font-family:var(--mono);font-size:.68rem;color:var(--muted);
+    display:flex;align-items:center;gap:.25rem;cursor:default}
+  .veclegend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .vecstat{display:grid;grid-template-columns:1fr 1fr;gap:.3rem .7rem;
+    font-family:var(--mono);font-size:.72rem;color:var(--muted);margin:.5rem 0}
+  .vecstat b{color:var(--ink);font-weight:600}
+  .vecwarn{border-left:2px solid var(--alert);padding:.3rem .6rem;font-size:.75rem;
+    line-height:1.6;background:rgba(255,122,107,.06);margin:.4rem 0}
+  .vecwarn b{color:var(--alert)}
+  .vecrow{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.4rem 0}
+  .vecrow button{padding:.1rem .55rem;font-size:.72rem;font-weight:400;align-self:auto;
+    background:none;color:var(--muted);border:1px solid var(--rail)}
+  .vecrow button:hover{color:var(--signal);border-color:var(--signal)}
+  .vecrow button.on{color:var(--signal);border-color:var(--signal)}
+  .vecnb{font-family:var(--mono);font-size:.7rem;line-height:1.8;color:var(--muted)}
+  .vecnb b{color:var(--ink)}
+
   /* ── 重播 ── */
   .replaybar{
     display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem;
@@ -749,6 +776,10 @@
       <svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
       架構
     </button>
+    <button type="button" class="tab" data-p="pVec" title="向量空間">
+      <svg viewBox="0 0 20 20"><circle cx="5" cy="6" r="1.6"/><circle cx="12" cy="4.5" r="1.6"/><circle cx="8" cy="12" r="1.6"/><circle cx="15" cy="13" r="1.6"/><circle cx="5.5" cy="16" r="1.6"/></svg>
+      向量
+    </button>
     <a class="tab" href="/studio" target="_blank" rel="noopener" title="Studio — 畫布版組裝台（另開分頁）">
       <svg viewBox="0 0 20 20"><circle cx="4.5" cy="5.5" r="2.2"/><circle cx="15.5" cy="10" r="2.2"/><circle cx="4.5" cy="14.5" r="2.2"/><path d="M6.7 6.5 13.3 9M6.7 13.5 13.3 11"/></svg>
       Studio
@@ -778,6 +809,24 @@
         <input type="file" id="fileInput" accept=".md,.txt,.pdf" hidden>
       </div>
       <div class="corpus" id="corpusList"></div>
+    </section>
+
+    <section class="panel" id="pVec">
+      <div class="pinbar"><button type="button" class="pin">釘住</button><span>滑鼠移開會自動收回去</span></div>
+      <h2>向量空間</h2>
+      <p class="lede">整個語料庫壓成兩維。一個點是一個片段，顏色是檔案。
+        滑過去看是誰，點下去看它的鄰居。</p>
+      <div class="vecwrap">
+        <canvas id="vecmap" width="620" height="620"></canvas>
+      </div>
+      <div class="vecrow">
+        <button type="button" id="vecCites">標出上一題引用到的</button>
+        <button type="button" id="vecReload">重新載入</button>
+      </div>
+      <div class="veclegend" id="vecLegend"></div>
+      <div class="vecstat" id="vecStat"></div>
+      <div class="vecwarn" id="vecWarn"></div>
+      <div class="vecnb" id="vecNb"></div>
     </section>
 
     <section class="panel" id="pLib">
@@ -1204,7 +1253,10 @@ function showPanel(id) {
 }
 
 RAIL.querySelectorAll('.tab[data-p]').forEach(t => {
-  t.onpointerenter = () => showPanel(t.dataset.p);   // 滑過去就換，不用點
+  t.onpointerenter = () => {
+    showPanel(t.dataset.p);                          // 滑過去就換，不用點
+    if (t.dataset.p === 'pVec' && !VEC.data) vecLoad();   // 投影要算 SVD，沒人看就不要算
+  };
   t.onclick = () => { showPanel(t.dataset.p); RAIL.classList.add('pinned'); };
 });
 
@@ -1223,6 +1275,169 @@ RAIL.addEventListener('pointerleave', () => RAIL.classList.remove('shut'));
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape' && RAIL.classList.contains('pinned')) closeRail();
 });
+
+/* ══════════ 向量空間 ══════════ */
+
+/* 為什麼要畫這張圖：學生以為「向量檢索會找到意思相近的」，
+   直到看見中文教材和英文論文是兩團完全分開的東西 ——
+   用中文問論文裡才有的概念，向量會把你拉去中文那一團。
+   那不是 query 寫壞了，是空間本來就長這樣。 */
+
+const VEC = { data: null, hot: new Set(), sel: null };
+const VEC_COLORS = ['#F2B441', '#6FD3A8', '#8FA8FF', '#FF7A6B', '#C9A0FF', '#57C7D4',
+                    '#E8905A', '#9BD45F', '#FF9FC4', '#7FD8B0', '#BFA76A', '#6FA8FF'];
+
+function vecLoad() {
+  $('vecStat').textContent = '載入中…';
+  return fetch('/api/vecmap').then(r => r.json()).then(d => {
+    VEC.data = d;
+    vecPaint();
+    vecStats();
+  });
+}
+
+function vecStats() {
+  const o = VEC.data.overview, m = VEC.data.map;
+  $('vecStat').innerHTML =
+    '<div>片段 <b>' + o.chunks + '</b></div>' +
+    '<div>檔案 <b>' + o.files + '</b></div>' +
+    '<div>維度 <b>' + (o.dims || '—') + '</b></div>' +
+    '<div>store <b>' + esc(o.store) + '</b></div>' +
+    '<div>字數中位數 <b>' + o.chars.p50 + '</b></div>' +
+    '<div>補過脈絡 <b>' + o.with_context + '</b></div>';
+
+  $('vecLegend').innerHTML = (m.files || []).map((f, i) =>
+    '<span><i style="background:' + VEC_COLORS[i % VEC_COLORS.length] + '"></i>' +
+    esc(f.split('/').pop()) + '</span>').join('');
+
+  const parts = [];
+  if (m.ok) parts.push('這兩個軸只解釋了 <b>' + (m.explained * 100).toFixed(1) +
+    '%</b> 的變異 —— <b>這是一張 384 維的影子，不是真相。</b>圖上很近不代表檢索一定撈得到。');
+  if (o.mean_similarity != null) parts.push('隨機兩塊的平均相似度是 <b>' + o.mean_similarity +
+    '</b>。所以「相似度 0.85」本身沒有意義 —— 要比的是**相對排名**，不是絕對數字。');
+  $('vecWarn').innerHTML = parts.join('<br><br>') || '';
+}
+
+function vecXY(pt, W, H, pad) {
+  return [pad + (pt.x + 1) / 2 * (W - pad * 2), pad + (1 - (pt.y + 1) / 2) * (H - pad * 2)];
+}
+
+function vecPaint() {
+  const cv = $('vecmap'), g = cv.getContext('2d');
+  const W = cv.width, H = cv.height, pad = 18;
+  g.clearRect(0, 0, W, H);
+
+  // 底線：讓人看得出原點在哪，不然散點沒有參考系
+  g.strokeStyle = 'rgba(139,150,179,.14)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(pad, H / 2); g.lineTo(W - pad, H / 2);
+  g.moveTo(W / 2, pad); g.lineTo(W / 2, H - pad);
+  g.stroke();
+
+  const m = VEC.data && VEC.data.map;
+  if (!m || !m.ok) {
+    g.fillStyle = '#8B96B3';
+    g.font = '14px system-ui';
+    g.fillText(m ? m.why : '沒有資料', pad, H / 2);
+    return;
+  }
+
+  m.points.forEach(pt => {
+    const [x, y] = vecXY(pt, W, H, pad);
+    const hot = VEC.hot.has(pt.id), sel = VEC.sel === pt.id;
+    g.beginPath();
+    g.arc(x, y, sel ? 6 : hot ? 5 : 2.6, 0, Math.PI * 2);
+    g.fillStyle = VEC_COLORS[pt.f % VEC_COLORS.length];
+    g.globalAlpha = (VEC.hot.size && !hot && !sel) ? 0.18 : 0.85;
+    g.fill();
+    if (hot || sel) {
+      g.globalAlpha = 1;
+      g.strokeStyle = sel ? '#EEF1F8' : '#F2B441';
+      g.lineWidth = sel ? 2 : 1.5;
+      g.stroke();
+    }
+  });
+  g.globalAlpha = 1;
+}
+
+/** 找滑鼠底下最近的點。canvas 沒有 DOM，只能自己算距離。 */
+function vecHit(ev) {
+  const m = VEC.data && VEC.data.map;
+  if (!m || !m.ok) return null;
+  const cv = $('vecmap'), r = cv.getBoundingClientRect();
+  const sx = cv.width / r.width, sy = cv.height / r.height;
+  const mx = (ev.clientX - r.left) * sx, my = (ev.clientY - r.top) * sy;
+  let best = null, bd = 14 * sx;
+  m.points.forEach(pt => {
+    const [x, y] = vecXY(pt, cv.width, cv.height, 18);
+    const d = Math.hypot(x - mx, y - my);
+    if (d < bd) { bd = d; best = pt; }
+  });
+  return best;
+}
+
+$('vecmap').onmousemove = ev => {
+  const pt = vecHit(ev);
+  let tip = document.querySelector('.vectip');
+  if (!pt) { if (tip) tip.remove(); return; }
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.className = 'vectip';
+    $('vecmap').parentNode.appendChild(tip);
+  }
+  const f = VEC.data.map.files[pt.f] || '';
+  tip.innerHTML = '<div>' + esc(pt.h) + '</div><div class="p">' + esc(f) +
+                  (pt.page ? ' · 第 ' + pt.page + ' 頁' : '') + '</div>';
+  const r = $('vecmap').getBoundingClientRect();
+  tip.style.left = Math.min(ev.clientX - r.left + 12, r.width - 170) + 'px';
+  tip.style.top = (ev.clientY - r.top + 12) + 'px';
+};
+$('vecmap').onmouseleave = () => {
+  const tip = document.querySelector('.vectip');
+  if (tip) tip.remove();
+};
+
+$('vecmap').onclick = ev => {
+  const pt = vecHit(ev);
+  if (!pt) return;
+  VEC.sel = pt.id;
+  vecPaint();
+  $('vecNb').textContent = '查鄰居中…';
+  fetch('/api/neighbors?id=' + encodeURIComponent(pt.id) + '&k=6')
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) { $('vecNb').textContent = d.why; return; }
+      $('vecNb').innerHTML = '<b>' + esc(pt.id) + '</b> 的鄰居：<br>' +
+        d.neighbors.map(n => '　' + n.sim.toFixed(3) + '　' + esc(n.path) + '　' +
+          esc(n.heading)).join('<br>') +
+        '<br><br>鄰居如果來自完全不相干的檔案，那就是它把不該撈的東西拉進來的原因。';
+    });
+};
+
+/* 上一題的答案引用了哪些片段 —— 把它們在空間裡點亮，
+   一眼就看得出「這一題的證據是散在各處還是擠在一團」 */
+$('vecCites').onclick = () => {
+  const ids = [...document.querySelectorAll('#answer .cite')].map(c => c.dataset.id);
+  if (!ids.length) {
+    $('vecNb').textContent = '上一題還沒有答案，或答案裡沒有可點的出處。';
+    return;
+  }
+  VEC.hot = new Set(ids);
+  $('vecCites').classList.add('on');
+  vecPaint();
+  $('vecNb').innerHTML = '標了 <b>' + VEC.hot.size + '</b> 個引用到的片段。' +
+    '擠成一團 = 證據都來自同一區；散開 = 這題真的需要跨文件。再按一次取消。';
+  $('vecCites').onclick = () => {
+    VEC.hot.clear(); VEC.sel = null;
+    $('vecCites').classList.remove('on');
+    $('vecNb').textContent = '';
+    vecPaint();
+    location.reload();     // 還原按鈕行為最省事的作法
+  };
+};
+
+$('vecReload').onclick = () => { VEC.hot.clear(); VEC.sel = null; $('vecNb').textContent = ''; vecLoad(); };
 
 /* ══════════ 軌跡重播 ══════════ */
 
