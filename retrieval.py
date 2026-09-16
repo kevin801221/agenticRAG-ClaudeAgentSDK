@@ -86,6 +86,21 @@ class ChromaStore:
     def __init__(self, collection):
         self.collection = collection
 
+    @staticmethod
+    def _fingerprint(chunks: Sequence[Chunk], vectors: np.ndarray) -> str:
+        """這批向量的指紋：片段 id ＋ 向量內容。
+
+        只比「筆數一樣嗎」是不夠的 —— 換了 embedding 模型、改了切塊參數之後
+        筆數常常剛好沒變，但每一個向量都不同了。那種情況下 chroma 會安靜地
+        繼續用舊向量，檢索結果全錯而且不會報錯。這是最難查的那種 bug。
+        """
+        import hashlib
+
+        h = hashlib.sha1()
+        h.update("\n".join(c.id for c in chunks).encode())
+        h.update(np.ascontiguousarray(vectors, dtype="float32").tobytes())
+        return h.hexdigest()
+
     @classmethod
     def build(cls, chunks: Sequence[Chunk], vectors: np.ndarray, data_dir: Path | None):
         import chromadb
@@ -95,9 +110,17 @@ class ChromaStore:
             if data_dir
             else chromadb.EphemeralClient()
         )
+        fp = cls._fingerprint(chunks, vectors)
         col = client.get_or_create_collection("rag", metadata={"hnsw:space": "cosine"})
-        # 直接灌已經算好的向量，不重新 embedding
-        if col.count() != len(chunks):
+        stale = (col.metadata or {}).get("fingerprint") != fp or col.count() != len(chunks)
+
+        if stale:
+            # 指紋不同就整個重來。想做增量更新的話要另外對帳，
+            # 但這個專案每次都是重建整份索引，重灌最單純也最不會錯。
+            client.delete_collection("rag")
+            col = client.create_collection(
+                "rag", metadata={"hnsw:space": "cosine", "fingerprint": fp}
+            )
             ids = [c.id for c in chunks]
             emb = np.asarray(vectors, dtype="float32").tolist()
             for i in range(0, len(ids), 2000):   # chroma 單次 upsert 有上限

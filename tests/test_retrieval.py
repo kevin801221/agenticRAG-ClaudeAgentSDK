@@ -419,3 +419,45 @@ def test_neighbors_excludes_itself_and_rejects_bad_id(vix):
     assert target not in [x["id"] for x in n["neighbors"]]
     assert n["neighbors"] == sorted(n["neighbors"], key=lambda x: -x["sim"])
     assert not inspect_store.neighbors(vix, "沒有這個片段#99")["ok"]
+
+
+def test_chroma_notices_when_the_vectors_changed(tmp_path):
+    """重建索引之後，chroma 一定要換成新向量。
+
+    原本只比「筆數一樣嗎」。換 embedding 模型、或改切塊參數但筆數剛好沒變的時候，
+    chroma 會安靜地繼續用舊向量 —— 檢索結果全錯，而且不會報任何錯。
+    這是最難查的那一種，所以釘住它。
+    """
+    pytest.importorskip("chromadb")
+    import numpy as np
+
+    import retrieval as R
+
+    chunks = [R.Chunk(id=f"x#{i}", path="x.md", heading="h", text="t") for i in range(4)]
+    first = np.eye(4, 8, dtype="float32")
+    second = np.roll(first, 3, axis=1)          # 筆數一樣，內容全不同
+
+    R.build_store("chroma", chunks, first, tmp_path)
+    store = R.build_store("chroma", chunks, second, tmp_path)
+
+    got = np.asarray(store.vectors_for(["x#0"]))[0]
+    assert np.allclose(got, second[0]), "chroma 還在用舊向量"
+    assert store.query(second[0], k=1)[0][0] == "x#0"
+
+
+def test_chroma_and_numpy_agree_after_a_rebuild(tmp_path):
+    """兩種 store 換來換去，答案必須一樣 —— 這是可插拔的最低門檻。"""
+    pytest.importorskip("chromadb")
+    import numpy as np
+
+    import retrieval as R
+
+    rng = np.random.default_rng(3)
+    chunks = [R.Chunk(id=f"c#{i}", path="c.md", heading="h", text="t") for i in range(12)]
+    V = rng.normal(size=(12, 16)).astype("float32")
+    V /= np.linalg.norm(V, axis=1, keepdims=True)
+
+    q = V[5]
+    npy = R.build_store("numpy", chunks, V, None).query(q, k=3)
+    chroma = R.build_store("chroma", chunks, V, tmp_path).query(q, k=3)
+    assert [i for i, _ in npy] == [i for i, _ in chroma]
