@@ -1,4 +1,4 @@
-# CLAUDE.md — agentic_RAG
+# CLAUDE.md — agenticRAG-ClaudeAgentSDK
 
 給接手這個子專案的 AI 看的。人類看 `README.md`。
 
@@ -10,7 +10,7 @@ Claude Code 公開課的教學專案：**教學生用 Claude Agent SDK 組合出
 主張：這些架構不是各自獨立的系統，是同一組模組的不同編排。
 模組 = `@tool`，編排 = system prompt，架構 = `modules.py` 的 `Architecture`。
 
-主要教材是 `notebooks/`（三本），網頁 `app.py` 是現場 demo 用的殼 ——
+主要教材是 `notebooks/`（四本），網頁 `app.py` 是現場 demo 用的殼 ——
 兩者共用同一份 `modules.py`。
 
 語料是 `corpus/`（內附的 Claude Code 參考文件，10 檔 / 41 片段）。
@@ -64,7 +64,9 @@ embedding 載不動時自動退回純 BM25，是現場教學的保命機制，�
 登記進 `retrieval.build_store()`。介面只有這兩個方法是刻意的 —— RAG 對向量庫的需求就這麼點。
 加完務必讓 `test_chroma_store_agrees_with_numpy_store` 那組測試也涵蓋它：**換 store 不該換答案**。
 
-**驗證還能跑**：`uv run pytest`（27 項，不花額度）。
+**驗證還能跑**：`uv run pytest`（70 項，不花額度）。
+notebook 有專屬那一組（`tests/test_notebooks.py`）：擋家目錄外洩、擋 base64 夾帶圖、
+擋沒跑過就送出的 notebook —— 編輯器把舊副本蓋回去時，靠它紅給你看。
 `tests/test_architectures.py` 專門盯架構層 —— 它存在的理由是：改壞 `modules.py`
 （例如語法錯誤、policy 引用了不存在的模組）不會被檢索層的測試抓到。加新架構務必讓它跑過。
 
@@ -80,3 +82,20 @@ embedding 載不動時自動退回純 BM25，是現場教學的保命機制，�
   要展示規模效應請用 `--root` 指向大一點的資料夾
 - 不做對話歷史：每次提問獨立，多輪會讓軌跡面板難教
 - litellm engine 的軌跡較簡略：拿不到結構化 thinking，靠 prompt 要求模型寫理由補
+
+## 後來長出來的東西（改之前先看一眼）
+
+| 檔案 | 做什麼 | 動它要注意 |
+|---|---|---|
+| `architect.py` | 聊出架構 / 幫忙寫 policy / 把 policy 反推成圖 | 三個 system prompt 都要求「只能用登記過的模組」，別放寬 |
+| `providers.py` | 換 LLM 供應商（記憶體，不寫 .env） | `env_overlay()` 一定要把沒用到的變數清成空字串 |
+| `mcp_registry.py` | 接外部 MCP server | 連不上就不准存；headers/env 回前端前要遮 |
+| `graph_store.py` | Neo4j（選用） | 給 agent 的 Cypher 有唯讀護欄，不要為了方便拿掉 |
+| `inspect_store.py` | 向量庫體檢 + 2D 投影 | 投影一定要回報解釋變異量，那是防止誤解的唯一手段 |
+| `traces.py` | 軌跡錄影與重播 | 重播餵回原本的 `handle()`，不要寫第二套渲染 |
+
+## 三條界線
+
+1. **沒接的資料源不能讓系統掛掉。** 沒設 `NEO4J_URI` 就當作沒有那一格，其他照常跑。
+2. **語意色不要換。** 琥珀=正在動作、綠=完成、紅=折返、藍=SDK 內建 —— 那是教學訊號。
+3. **前端不要引入外部資源。** 教室可能沒網路，CDN 抓不到就破版。圖示走 `static/icons.svg`。

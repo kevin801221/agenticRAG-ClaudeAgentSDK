@@ -5,6 +5,9 @@ __pycache__/
 data/
 .pytest_cache/
 
+# Jupyter 的自動存檔副本。進了 repo 只會變成「有兩份 notebook，改到錯的那份」
+.ipynb_checkpoints/
+
 # 論文 PDF 不進 repo（別人的著作，各自有授權）—— 用 scripts/fetch_papers.sh 抓
 corpus/papers/
 

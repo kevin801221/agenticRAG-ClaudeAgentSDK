@@ -360,8 +360,8 @@ def test_projection_is_a_shadow_and_says_so(vix):
     assert p["ok"]
     assert len(p["points"]) == len(vix.chunks)
     assert 0 < p["explained"] <= 1
-    # 座標要**填滿** [-1, 1]，前端才不用管尺度（只檢查「沒超出」的話，
-    # 把縮放拿掉也驗不出來 —— 這是第一版寫得太鬆的地方）
+    # 座標要**填滿** [-1, 1]，前端才不用管尺度。
+    # 只斷言「沒超出」是不夠的 —— 那樣把縮放整段拿掉也驗不出來。
     xs = [q["x"] for q in p["points"]] + [q["y"] for q in p["points"]]
     assert max(abs(v) for v in xs) == pytest.approx(1.0, abs=1e-3)
     assert all(-1.0001 <= v <= 1.0001 for v in xs)
