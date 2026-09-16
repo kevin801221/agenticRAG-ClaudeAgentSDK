@@ -218,6 +218,8 @@ VS Code **不會**顯示 `agentic-rag` 這個名字 —— 它有自己的環境
 | VS Code 選單裡找不到 `agentic-rag` | **正常**，VS Code 只認路徑不認名字 | 選 `.venv/bin/python` 那個就對了 |
 | Jupyter Lab 說找不到 kernel | 還沒跑 `setup_kernel.sh` | 跑它 |
 | VS Code 自己建了 `notebooks/.venv` | 它自作聰明 | **刪掉那個資料夾**，再重選 |
+| 改好的 notebook 內容自己不見了 | VS Code 開著它、在背景存了一份**舊的**記憶體副本蓋回去 | 要讓別人（或指令）改 notebook 前，**先在編輯器把它關掉**；改完再開 |
+| notebook 突然變好幾 MB | 拖圖進去時 VS Code 把整張圖 base64 塞進 .ipynb | 圖放 `assets/`，用 `![說明](../assets/圖.png)` 引用 |
 | 選單裡一堆長得很像的 Python | 認路徑不要認名字 | 要 `<專案>/.venv/bin/python` |
 
 ```bash
