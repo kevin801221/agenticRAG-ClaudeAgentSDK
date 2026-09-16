@@ -516,6 +516,18 @@
     width:2px;border-radius:0 2px 2px 0;background:var(--signal);
   }
   .rail .tab .cnt{font-family:var(--mono);color:var(--signal);font-size:.58rem}
+  /* 檢視器那兩格要看得出「點了會離開這一頁」 */
+  .rail .tab .ext{
+    position:absolute;top:.3rem;right:.35rem;font-style:normal;font-size:.62rem;
+    color:var(--muted);opacity:.65;line-height:1;
+  }
+  .rail .tab.viewer:hover .ext{color:var(--signal);opacity:1}
+  .panel h2 .open{
+    font-size:.7rem;font-weight:400;margin-left:.5rem;text-decoration:none;
+    border:1px solid var(--glass-line);border-radius:4px;padding:.1rem .45rem;
+    color:var(--muted);white-space:nowrap;
+  }
+  .panel h2 .open:hover{color:var(--signal);border-color:var(--signal)}
 
   .rail .panels{flex:1;min-width:var(--drawer);overflow:hidden;position:relative}
   .rail .panel{
@@ -847,14 +859,16 @@
       <svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
       架構
     </button>
-    <button type="button" class="tab" data-p="pGraph" title="知識圖譜">
+    <a class="tab viewer" data-p="pGraph" href="/inspect#graph" target="_blank" rel="noopener"
+       title="知識圖譜 — 滑過去看縮圖，點一下開整頁">
       <svg viewBox="0 0 20 20"><circle cx="10" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="16" cy="14" r="2"/><path d="M10 6 5 12M10 6l5 6M6 14h8"/></svg>
-      圖譜
-    </button>
-    <button type="button" class="tab" data-p="pVec" title="向量空間">
+      圖譜<i class="ext" aria-hidden="true">↗</i>
+    </a>
+    <a class="tab viewer" data-p="pVec" href="/inspect#vec" target="_blank" rel="noopener"
+       title="向量空間 — 滑過去看縮圖，點一下開整頁">
       <svg viewBox="0 0 20 20"><circle cx="5" cy="6" r="1.6"/><circle cx="12" cy="4.5" r="1.6"/><circle cx="8" cy="12" r="1.6"/><circle cx="15" cy="13" r="1.6"/><circle cx="5.5" cy="16" r="1.6"/></svg>
-      向量
-    </button>
+      向量<i class="ext" aria-hidden="true">↗</i>
+    </a>
     <a class="tab" href="/studio" target="_blank" rel="noopener" title="Studio — 畫布版組裝台（另開分頁）">
       <svg viewBox="0 0 20 20"><circle cx="4.5" cy="5.5" r="2.2"/><circle cx="15.5" cy="10" r="2.2"/><circle cx="4.5" cy="14.5" r="2.2"/><path d="M6.7 6.5 13.3 9M6.7 13.5 13.3 11"/></svg>
       Studio
@@ -888,7 +902,7 @@
 
     <section class="panel" id="pGraph">
       <div class="pinbar"><button type="button" class="pin">釘住</button><span>滑鼠移開會自動收回去</span></div>
-      <h2>知識圖譜 <a href="/inspect#graph" target="_blank" rel="noopener" style="font-size:.72rem;font-weight:400;margin-left:.4rem">↗ 開獨立一頁</a></h2>
+      <h2>知識圖譜 <a href="/inspect#graph" target="_blank" rel="noopener" class="open">↗ 開獨立一頁</a></h2>
       <p class="lede">同一批片段的另一種索引。向量看到的是「雲」，圖看到的是「骨架」——
         這裡只畫<strong>跨檔案</strong>的相似關係，也就是同一個概念出現在兩份不同文件裡。</p>
       <canvas id="graphmap" width="620" height="560"></canvas>
@@ -904,7 +918,7 @@
 
     <section class="panel" id="pVec">
       <div class="pinbar"><button type="button" class="pin">釘住</button><span>滑鼠移開會自動收回去</span></div>
-      <h2>向量空間 <a href="/inspect#vec" target="_blank" rel="noopener" style="font-size:.72rem;font-weight:400;margin-left:.4rem">↗ 開獨立一頁</a></h2>
+      <h2>向量空間 <a href="/inspect#vec" target="_blank" rel="noopener" class="open">↗ 開獨立一頁</a></h2>
       <p class="lede">整個語料庫壓成兩維。一個點是一個片段，顏色是檔案。
         滑過去看是誰，點下去看它的鄰居。</p>
       <div class="vecwrap">
@@ -1345,12 +1359,17 @@ function showPanel(id) {
 }
 
 RAIL.querySelectorAll('.tab[data-p]').forEach(t => {
+  // 檢視器（向量 / 圖譜）是 <a>：點下去開整頁，不要攔它，也不要順手釘住抽屜
+  const isViewer = t.tagName === 'A';
   t.onpointerenter = () => {
     showPanel(t.dataset.p);                          // 滑過去就換，不用點
     if (t.dataset.p === 'pVec' && !VEC.data) vecLoad();   // 投影要算 SVD，沒人看就不要算
     if (t.dataset.p === 'pGraph' && !GR.data) gLoad();    // 圖也是，沒人看就不要連 Neo4j
   };
-  t.onclick = () => { showPanel(t.dataset.p); RAIL.classList.add('pinned'); };
+  t.onclick = () => {
+    showPanel(t.dataset.p);
+    if (!isViewer) RAIL.classList.add('pinned');   // 檢視器點了就離開這一頁，不用釘
+  };
 });
 
 RAIL.querySelectorAll('.pin').forEach(b => {
