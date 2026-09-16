@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+<!-- 圖示表。用法：<svg class="ic"><use href="/static/icons.svg#i-xxx"/></svg>
+     全部 20x20 viewBox、線條、吃 currentColor —— 跟介面同一個語言，不是彩色貼紙。 -->
+<defs>
+    <!-- 品牌：三個節點連成一條路徑，就是這個專案在做的事 -->
+    <symbol id="i-mark" viewBox="0 0 20 20">
+      <circle cx="4" cy="10" r="2.1"/><circle cx="16" cy="5" r="2.1"/><circle cx="16" cy="15" r="2.1"/>
+      <path d="M6 9.2 14 5.8M6 10.8 14 14.2"/>
+    </symbol>
+
+    <!-- 模組 / 元件：堆疊的層 -->
+    <symbol id="i-layers" viewBox="0 0 20 20">
+      <path d="M10 2.6 17.4 6.4 10 10.2 2.6 6.4z"/><path d="M2.6 10 10 13.8 17.4 10"/>
+      <path d="M2.6 13.6 10 17.4 17.4 13.6"/>
+    </symbol>
+
+    <!-- API / SDK 內建工具：閃電（線條版，不是 emoji） -->
+    <symbol id="i-bolt" viewBox="0 0 20 20"><path d="M11.4 2.2 4.6 11.2h4.2l-.8 6.6 6.8-9h-4.2z"/></symbol>
+
+    <!-- MCP：插頭 -->
+    <symbol id="i-plug" viewBox="0 0 20 20">
+      <path d="M7.4 2.6v4M12.6 2.6v4M5 6.6h10v2.6a5 5 0 0 1-5 5 5 5 0 0 1-5-5z"/><path d="M10 14.2v3.2"/>
+    </symbol>
+
+    <!-- 清空：橡皮擦 -->
+    <symbol id="i-erase" viewBox="0 0 20 20">
+      <path d="M8.6 16.4H17"/><path d="M4 12.6 9.6 7l4.8 4.8-4.4 4.4H6.2z"/><path d="M9.6 7 13 3.6l4.8 4.8L14.4 11.8"/>
+    </symbol>
+
+    <!-- 設定：推桿，不用齒輪（齒輪太像系統設定，這裡調的是編排） -->
+    <symbol id="i-sliders" viewBox="0 0 20 20">
+      <path d="M3 6h9M15.5 6H17M3 14h3M9.5 14H17"/>
+      <circle cx="13.6" cy="6" r="1.9"/><circle cx="7.6" cy="14" r="1.9"/>
+    </symbol>
+
+    <!-- 試跑：播放 -->
+    <symbol id="i-play" viewBox="0 0 20 20"><path d="M6.4 3.8 16 10l-9.6 6.2z"/></symbol>
+
+    <!-- 架構師：對話（不是機器人 —— 那個最像玩具） -->
+    <symbol id="i-chat" viewBox="0 0 20 20">
+      <path d="M17 11.4a3 3 0 0 1-3 3H7.6L3 17.6V5.6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3z"/>
+      <path d="M7 7.6h6M7 10.6h3.6"/>
+    </symbol>
+
+    <!-- 儲存：往下歸檔 -->
+    <symbol id="i-save" viewBox="0 0 20 20">
+      <path d="M10 2.8v8.6M6.6 8.2 10 11.6l3.4-3.4"/><path d="M3.4 13.2v2.2a1.8 1.8 0 0 0 1.8 1.8h9.6a1.8 1.8 0 0 0 1.8-1.8v-2.2"/>
+    </symbol>
+
+    <!-- 置中：準心 -->
+    <symbol id="i-target" viewBox="0 0 20 20">
+      <circle cx="10" cy="10" r="6.2"/><circle cx="10" cy="10" r="1.9"/>
+      <path d="M10 1.4v2.6M10 16v2.6M1.4 10H4M16 10h2.6"/>
+    </symbol>
+
+    <!-- 自動排版：對齊格線（不用魔法棒，那是 AI 玩具的第一名） -->
+    <symbol id="i-align" viewBox="0 0 20 20">
+      <rect x="2.6" y="3" width="6" height="4.4" rx="1"/><rect x="11.4" y="3" width="6" height="4.4" rx="1"/>
+      <rect x="2.6" y="12.6" width="6" height="4.4" rx="1"/><rect x="11.4" y="12.6" width="6" height="4.4" rx="1"/>
+      <path d="M10 7.4v5.2"/>
+    </symbol>
+
+    <!-- 照 policy 畫線：文字變成連線 -->
+    <symbol id="i-wire" viewBox="0 0 20 20">
+      <path d="M2.6 4.6h6M2.6 8h4.4M2.6 11.4h6M2.6 14.8h3.4"/>
+      <circle cx="15.4" cy="6" r="1.9"/><circle cx="15.4" cy="14" r="1.9"/>
+      <path d="M11 9.6h2.2a2.2 2.2 0 0 0 2.2-2.2M11 10.4h2.2a2.2 2.2 0 0 1 2.2 2.2"/>
+    </symbol>
+
+    <!-- 搜尋 -->
+    <symbol id="i-search" viewBox="0 0 20 20"><circle cx="8.8" cy="8.8" r="5.4"/><path d="M12.8 12.8 17 17"/></symbol>
+
+    <!-- 面板收合 -->
+    <symbol id="i-panel-left" viewBox="0 0 20 20">
+      <rect x="2.6" y="3.4" width="14.8" height="13.2" rx="2"/><path d="M8 3.4v13.2"/><path d="M13.6 8.4 11.4 10l2.2 1.6"/>
+    </symbol>
+    <symbol id="i-panel-right" viewBox="0 0 20 20">
+      <rect x="2.6" y="3.4" width="14.8" height="13.2" rx="2"/><path d="M12 3.4v13.2"/><path d="M6.4 8.4 8.6 10l-2.2 1.6"/>
+    </symbol>
+
+    <!-- 側欄五格 -->
+    <symbol id="i-note" viewBox="0 0 20 20"><path d="M5.4 2.6h9.2v15l-4.6-3.4-4.6 3.4z"/></symbol>
+    <symbol id="i-corpus" viewBox="0 0 20 20">
+      <path d="M3.2 5.4h6l1.6 2h6v9.2h-13.6z"/><path d="M3.2 8.4h13.6"/>
+    </symbol>
+    <symbol id="i-grid" viewBox="0 0 20 20">
+      <rect x="3" y="3" width="6" height="6" rx="1.2"/><rect x="11" y="3" width="6" height="6" rx="1.2"/>
+      <rect x="3" y="11" width="6" height="6" rx="1.2"/><rect x="11" y="11" width="6" height="6" rx="1.2"/>
+    </symbol>
+    <symbol id="i-graph" viewBox="0 0 20 20">
+      <circle cx="10" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="16" cy="14" r="2"/>
+      <path d="M8.8 5.8 5.2 12.2M11.2 5.8l3.6 6.4M6 14h8"/>
+    </symbol>
+    <symbol id="i-scatter" viewBox="0 0 20 20">
+      <circle cx="5" cy="6" r="1.6"/><circle cx="12" cy="4.4" r="1.6"/><circle cx="8" cy="12" r="1.6"/>
+      <circle cx="15" cy="13" r="1.6"/><circle cx="5.5" cy="16" r="1.6"/>
+    </symbol>
+    <symbol id="i-studio" viewBox="0 0 20 20">
+      <rect x="2.6" y="4" width="6" height="4.2" rx="1"/><rect x="11.4" y="11.8" width="6" height="4.2" rx="1"/>
+      <path d="M8.6 6.1h3a2 2 0 0 1 2 2v3.7"/>
+    </symbol>
+    <symbol id="i-open" viewBox="0 0 20 20">
+      <path d="M11 3.4h5.6V9"/><path d="M16.6 3.4 9.4 10.6"/>
+      <path d="M14.4 11.6v4a1.8 1.8 0 0 1-1.8 1.8H4.4a1.8 1.8 0 0 1-1.8-1.8V7.4a1.8 1.8 0 0 1 1.8-1.8h4"/>
+    </symbol>
+  </defs>
+</svg>

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agentic RAG Studio — 工作流組裝台</title>
+<link rel="stylesheet" href="/static/atmosphere.css">
 <style>
   :root {
     --bg-base: #0B0F19;
@@ -1032,6 +1033,120 @@
   }
 
   .hidden { display: none !important; }
+
+  /* ══════════ 雨天玻璃：材質覆寫 ══════════
+     只改「表面長什麼樣」，語意色（琥珀=動作、綠=完成、紅=折返、藍=SDK）一律不動。
+     投影機是硬條件：霧只加在面板上，文字對比度不降。 */
+
+  header,
+  .palette-panel,
+  .side,
+  .sheet .box,
+  .srv,
+  .node,
+  .provider-pill,
+  .canvas-toolbar,
+  .mini-rail {
+    background: var(--glass-bg) !important;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-color: var(--glass-line) !important;
+    box-shadow: var(--glass-lip), var(--glass-drop);
+  }
+
+  /* 面板頂端那一道細高光 —— 「這是一塊玻璃」最省力的訊號 */
+  header::after,
+  .palette-panel::after,
+  .side::after {
+    content: "";
+    position: absolute;
+    left: 6%; right: 6%; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--glass-line-hi), transparent);
+    pointer-events: none;
+  }
+  header, .palette-panel, .side { position: relative; }
+
+  /* 畫布不要純色 —— 給它一點景深，節點才像浮在上面 */
+  .stage {
+    background:
+      radial-gradient(760px 520px at 28% 18%, rgba(104, 146, 214, 0.09), transparent 64%),
+      radial-gradient(620px 480px at 82% 86%, rgba(214, 158, 74, 0.055), transparent 62%),
+      transparent !important;
+  }
+
+  /* 節點：邊緣柔一階，選中時用光暈而不是粗框 */
+  .node { border-radius: 9px; transition: box-shadow .16s, border-color .16s; }
+  .node:hover { border-color: var(--glass-line-hi) !important; }
+  .node.sel {
+    border-color: var(--amber) !important;
+    box-shadow: var(--glass-lip), 0 0 0 1px var(--amber), 0 6px 26px rgba(245, 158, 11, 0.20);
+  }
+  .node.ran { border-color: rgba(16, 185, 129, .55) !important; }
+  .node.hot {
+    border-color: var(--amber) !important;
+    box-shadow: var(--glass-lip), 0 0 0 2px var(--amber), 0 0 28px rgba(245, 158, 11, 0.32);
+  }
+
+  /* 元件庫卡片：靜態時幾乎透明，滑過去才浮起來 */
+  .pchip {
+    background: rgba(255, 255, 255, 0.022);
+    border-color: var(--glass-line);
+    transition: background .14s, border-color .14s, transform .14s;
+  }
+  .pchip:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: var(--glass-line-hi);
+    transform: translateY(-1px);
+  }
+
+  /* 輸入框也做成凹進去的玻璃 */
+  input, select, textarea {
+    background: rgba(9, 13, 22, 0.5) !important;
+    border-color: var(--glass-line) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--amber) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(245, 158, 11, 0.12);
+  }
+
+  /* 遮罩層：不要純黑，要有霧 */
+  .sheet { background: rgba(9, 13, 21, 0.62); backdrop-filter: blur(6px); }
+
+  /* ── 頂欄密度 ──
+     換行是這一列最醜的東西：一個字掉到第二行，整列的視覺重心就歪了。
+     這裡一律 nowrap，寧可讓字變小。 */
+  header { flex-wrap: nowrap; gap: .8rem; overflow-x: auto; scrollbar-width: none; }
+  header::-webkit-scrollbar { display: none; }
+  header h1,
+  header .header-badge,
+  header .claim,
+  header .arch-select-wrapper label,
+  header .header-actions button,
+  header .provider-pill,
+  header > a { white-space: nowrap; }
+  header h1 { font-size: .95rem; letter-spacing: .01em }
+  header .claim { font-size: .78rem; white-space: normal; max-width: 27rem; flex: 0 1 auto }
+  header .provider-pill { font-size: .74rem }
+  header .provider-pill b { font-weight: 600 }
+
+  /* 品牌標記：實色圓角磚太像 app icon。改成玻璃上的線條，外圈一點光。 */
+  .brand-icon {
+    background: linear-gradient(150deg, rgba(245,158,11,.20), rgba(245,158,11,.05)) !important;
+    color: var(--amber);
+    border: 1px solid rgba(245, 158, 11, .32);
+    box-shadow: inset 0 1px 0 rgba(255, 216, 150, .22), 0 3px 14px rgba(245, 158, 11, .14);
+    border-radius: 8px;
+  }
+  .header-badge { letter-spacing: .02em; font-size: .68rem; padding: .12rem .5rem }
+
+  /* 分頁與工具列按鈕：圖示跟字一起置中，不要一高一低 */
+  .t2, .canvas-btn, .mini-icon-btn, .toggle-panel-btn,
+  .header-actions button, .vecrow button {
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .mini-icon-btn, .toggle-panel-btn { gap: 0 }
+  .mini-icon-btn .ic, .toggle-panel-btn .ic { margin: 0 }
 </style>
 </head>
 <body>
@@ -1039,7 +1154,7 @@
 <!-- ── 頂部導航欄 ── -->
 <header>
   <div class="brand">
-    <div class="brand-icon">⚡</div>
+    <div class="brand-icon"><svg class="ic ic-lg" aria-hidden="true"><use href="/static/icons.svg#i-mark"/></svg></div>
     <h1>Agentic RAG Studio</h1>
     <span class="header-badge">Workflow Canvas</span>
   </div>
@@ -1053,7 +1168,7 @@
   </div>
 
   <div class="header-actions">
-    <button type="button" class="ghost" id="sClear" title="清空畫布上的節點與連線">🧹 清空畫布</button>
+    <button type="button" class="ghost" id="sClear" title="清空畫布上的節點與連線"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-erase"/></svg>清空畫布</button>
   </div>
 
   <span class="spacer"></span>
@@ -1066,7 +1181,7 @@
   </div>
 
   <a href="/" class="ghost" style="padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.8rem;">回主畫面</a>
-  <button type="button" class="toggle-panel-btn" id="toggleRightBtn" onclick="toggleRightPanel()" title="收起/展開右側面板">⇥</button>
+  <button type="button" class="toggle-panel-btn" id="toggleRightBtn" onclick="toggleRightPanel()" title="收起/展開右側面板"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-panel-right"/></svg></button>
 </header>
 
 <!-- ── 主體三欄佈局 ── -->
@@ -1077,25 +1192,25 @@
       <span class="panel-title">
         <span>元件庫</span>
       </span>
-      <button type="button" class="toggle-panel-btn" id="toggleLeftBtn" onclick="toggleLeftPanel()" title="收起/展開左側面板">⇤</button>
+      <button type="button" class="toggle-panel-btn" id="toggleLeftBtn" onclick="toggleLeftPanel()" title="收起/展開左側面板"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-panel-left"/></svg></button>
     </div>
 
     <!-- 3 大分類 Tabs -->
     <div class="category-tabs">
       <button type="button" class="pal-tab-btn active" data-tab="modules" onclick="switchPalTab('modules')">
-        🧱 RAG 模組
+        <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-layers"/></svg>RAG 模組
       </button>
       <button type="button" class="pal-tab-btn" data-tab="api" onclick="switchPalTab('api')">
-        ⚡️ API 工具 <span class="badge-count" id="apiBadge">0</span>
+        <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-bolt"/></svg>API 工具 <span class="badge-count" id="apiBadge">0</span>
       </button>
       <button type="button" class="pal-tab-btn" data-tab="mcp" onclick="switchPalTab('mcp')">
-        🔌 MCP 工具 <span class="badge-count" id="mcpBadge">0</span>
+        <svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-plug"/></svg>MCP 工具 <span class="badge-count" id="mcpBadge">0</span>
       </button>
     </div>
 
     <!-- 搜尋過濾框 -->
     <div class="search-wrapper">
-      <input type="text" class="search-input" id="palSearch" placeholder="🔍 搜尋模組或工具..." oninput="filterPalette(this.value)">
+      <input type="text" class="search-input" id="palSearch" placeholder="搜尋模組或工具…" oninput="filterPalette(this.value)">
     </div>
 
     <!-- 分類內容區 -->
@@ -1124,9 +1239,9 @@
 
     <!-- 收折時的小圖標欄 -->
     <div class="mini-dock">
-      <div class="mini-icon-btn" onclick="toggleLeftPanel()" title="展開元件庫">🧱</div>
-      <div class="mini-icon-btn" onclick="openSheet('mcpSheet')" title="管理 MCP">🔌</div>
-      <div class="mini-icon-btn" onclick="openSheet('provSheet')" title="LLM 供應商">⚙️</div>
+      <div class="mini-icon-btn" onclick="toggleLeftPanel()" title="展開元件庫"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-layers"/></svg></div>
+      <div class="mini-icon-btn" onclick="openSheet('mcpSheet')" title="管理 MCP"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-plug"/></svg></div>
+      <div class="mini-icon-btn" onclick="openSheet('provSheet')" title="LLM 供應商"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-sliders"/></svg></div>
     </div>
 
     <!-- 底部操作提示 -->
@@ -1150,11 +1265,11 @@
 
     <!-- 畫布浮動控制欄 (LangGraph / n8n 風格) -->
     <div class="canvas-floating-bar">
-      <button type="button" class="canvas-btn" onclick="autoLayout()" title="照連線深度自動整齊排版">✨ 自動排版</button>
+      <button type="button" class="canvas-btn" onclick="autoLayout()" title="照連線深度自動整齊排版"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-align"/></svg>自動排版</button>
       <div class="bar-divider"></div>
-      <button type="button" class="canvas-btn" id="canvasRedrawBtn" onclick="$('sRedraw').click()" title="照右側 policy 重新連線">⚡️ 照 policy 畫線</button>
+      <button type="button" class="canvas-btn" id="canvasRedrawBtn" onclick="$('sRedraw').click()" title="照右側 policy 重新連線"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-wire"/></svg>照 policy 畫線</button>
       <div class="bar-divider"></div>
-      <button type="button" class="canvas-btn" onclick="centerStartNode()" title="聚焦到起點節點">🎯 置中起點</button>
+      <button type="button" class="canvas-btn" onclick="centerStartNode()" title="聚焦到起點節點"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-target"/></svg>置中起點</button>
       <div class="bar-divider"></div>
       <button type="button" class="canvas-btn" onclick="toggleFocusCanvas()" title="畫布全螢幕/專注模式">⛶ 專注畫布</button>
     </div>
@@ -1164,9 +1279,9 @@
   <section class="side">
     <div class="side-header">
       <div class="tabs2">
-        <button type="button" class="t2 on" data-t="tSetup">⚙️ 編排設定</button>
-        <button type="button" class="t2" data-t="tRun">▶️ 即時試跑</button>
-        <button type="button" class="t2" data-t="tChat">🤖 AI 架構師</button>
+        <button type="button" class="t2 on" data-t="tSetup"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-sliders"/></svg>編排設定</button>
+        <button type="button" class="t2" data-t="tRun"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-play"/></svg>即時試跑</button>
+        <button type="button" class="t2" data-t="tChat"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-chat"/></svg>AI 架構師</button>
       </div>
     </div>
 
@@ -1194,7 +1309,7 @@
       <textarea id="sPolicy" placeholder="什麼時候用哪個模組、判斷條件是什麼、失敗了怎麼辦、出處要怎麼標。"></textarea>
 
       <div class="row" style="margin-top: 0.4rem;">
-        <button type="button" id="sSave">💾 儲存為架構</button>
+        <button type="button" id="sSave"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-save"/></svg>儲存為架構</button>
         <span class="msg" id="sMsg"></span>
       </div>
     </div>
@@ -1206,7 +1321,7 @@
       <textarea id="rq" placeholder="輸入問題，例如：hook 要怎麼擋住寫入 .env？"></textarea>
       <div class="ex" id="rEx"></div>
       <div class="row">
-        <button type="button" id="rGo">▶️ 開始測試</button>
+        <button type="button" id="rGo"><svg class="ic" aria-hidden="true"><use href="/static/icons.svg#i-play"/></svg>開始測試</button>
         <button type="button" class="ghost" id="rClear">清空結果</button>
         <span class="msg" id="rMsg"></span>
       </div>
@@ -1295,6 +1410,8 @@
 <script>
 
 const $ = id => document.getElementById(id);
+/* 圖示都放在 /static/icons.svg，JS 要換圖示時用這個 —— 不要在字串裡塞 emoji */
+const icon = n => '<svg class="ic" aria-hidden="true"><use href="/static/icons.svg#' + n + '"/></svg>';
 const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -2450,14 +2567,14 @@ window.toggleLeftPanel = function() {
   const main = document.querySelector('main');
   main.classList.toggle('left-collapsed');
   const btn = $('toggleLeftBtn');
-  if (btn) btn.innerHTML = main.classList.contains('left-collapsed') ? '⇥' : '⇤';
+  if (btn) btn.innerHTML = icon(main.classList.contains('left-collapsed') ? 'i-panel-right' : 'i-panel-left');
 };
 
 window.toggleRightPanel = function() {
   const main = document.querySelector('main');
   main.classList.toggle('right-collapsed');
   const btn = $('toggleRightBtn');
-  if (btn) btn.innerHTML = main.classList.contains('right-collapsed') ? '⇤' : '⇥';
+  if (btn) btn.innerHTML = icon(main.classList.contains('right-collapsed') ? 'i-panel-left' : 'i-panel-right');
 };
 
 window.toggleFocusCanvas = function() {

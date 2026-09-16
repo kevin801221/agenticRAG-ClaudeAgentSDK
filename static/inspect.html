@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>資料源檢視器 — 向量空間與知識圖譜</title>
+<link rel="stylesheet" href="/static/atmosphere.css">
 <style>
   :root{
     --ground:#151B2B; --panel:#1E2639; --panel-2:#232C42; --rail:#33405C;
@@ -77,6 +78,27 @@
   .model{font-family:var(--mono);font-size:.72rem;color:var(--muted);line-height:1.8}
   .model b{color:var(--ink)}
   .hidden{display:none !important}
+
+  /* ══════════ 雨天玻璃 ══════════ */
+  header, .side {
+    background: var(--glass-bg) !important;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-color: var(--glass-line) !important;
+    box-shadow: var(--glass-lip), 0 6px 24px rgba(3,7,16,.28);
+  }
+  .stage { background:
+    radial-gradient(720px 520px at 26% 16%, rgba(104,146,214,.085), transparent 64%),
+    radial-gradient(600px 440px at 84% 88%, rgba(214,158,74,.05), transparent 62%),
+    transparent; }
+  canvas {
+    background: rgba(10, 15, 26, .58) !important;
+    backdrop-filter: blur(10px);
+    border-color: var(--glass-line) !important;
+    box-shadow: var(--glass-lip), var(--glass-drop);
+  }
+  .tabs button { backdrop-filter: blur(8px); background: rgba(255,255,255,.025) }
+  .tabs button.on { background: rgba(245,158,11,.10) }
 </style>
 </head>
 <body>

@@ -1,0 +1,136 @@
+/* 雨天玻璃：三頁共用的材質層。
+ *
+ * 只動「表面」，不動「語意」—— 琥珀色還是「正在動作」、綠色還是「跑完了」、
+ * 紅色還是「折返」。那些是教學用的訊號，換了學生就看不懂了。
+ *
+ * 做法分三層：
+ *   ① 底：深藍灰 + 兩團很散的光暈（像雨夜街燈透過窗）
+ *   ② 面：半透明 + backdrop-filter 毛玻璃，邊緣用內陰影做出一條「玻璃唇」
+ *   ③ 粒：極淡的顆粒噪點，把所有硬邊化開 —— 這就是「毛邊」的來源
+ *
+ * 投影機是硬條件：文字對比度一律不降，霧只加在**表面**不加在**字**上。
+ */
+
+:root {
+  /* 玻璃材質 —— 各頁用自己的語意色，材質共用這幾個 */
+  --glass-bg: rgba(26, 34, 52, 0.55);
+  --glass-bg-strong: rgba(22, 29, 46, 0.78);
+  --glass-line: rgba(188, 208, 246, 0.09);
+  --glass-line-hi: rgba(200, 222, 255, 0.16);
+  --glass-lip: inset 0 1px 0 rgba(206, 226, 255, 0.07);
+  --glass-drop: 0 10px 34px rgba(3, 7, 16, 0.42);
+  --glass-blur: blur(18px) saturate(118%);
+}
+
+/* ── ① 底：雨夜的光 ───────────────────────────── */
+
+html {
+  background: #0d121d;
+}
+
+body {
+  position: relative;
+  background:
+    /* 左上：冷光，像窗外的路燈 */
+    radial-gradient(1100px 760px at 8% -6%, rgba(96, 140, 210, 0.16), transparent 62%),
+    /* 右下：一點暖，跟琥珀訊號色呼應，但很淡 */
+    radial-gradient(900px 620px at 104% 108%, rgba(214, 158, 74, 0.10), transparent 60%),
+    /* 中間偏右：第三團，避免上下兩團中間出現死區 */
+    radial-gradient(700px 700px at 78% 34%, rgba(74, 112, 166, 0.07), transparent 66%),
+    linear-gradient(174deg, #101725 0%, #0c111c 58%, #0a0f19 100%) !important;
+  background-attachment: fixed;
+}
+
+/* ── ③ 粒：顆粒 + 斜向水痕 ─────────────────────── */
+
+/* 一張 SVG 亂數噪點鋪滿全畫面。opacity 只有 3.5%，
+   單看幾乎看不見，但它讓每一條硬邊都軟了一階 —— 那就是「毛邊」。 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 幾道很斜很淡的長條，像玻璃上的水痕。靜態的 —— 會動的雨在投影幕上只會讓人分心。 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: repeating-linear-gradient(
+    101deg,
+    transparent 0 46px,
+    rgba(178, 204, 248, 0.022) 46px 47px,
+    transparent 47px 132px
+  );
+}
+
+/* 內容要浮在霧上面 */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── ② 面：毛玻璃 ─────────────────────────────── */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-lip), var(--glass-drop);
+}
+
+/* 玻璃唇：面板頂端那一道細細的高光，是「這是一塊玻璃」最省力的訊號 */
+.lip {
+  position: relative;
+}
+.lip::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-line-hi), transparent);
+  pointer-events: none;
+}
+
+/* ── 圖示 ─────────────────────────────────────── */
+
+/* 統一 20px、1.6 描邊、吃 currentColor。
+   全部走 <svg class="ic"><use href="#i-xxx"/></svg>，路徑只寫一次。 */
+.ic {
+  width: 1.05em;
+  height: 1.05em;
+  flex: 0 0 auto;
+  vertical-align: -0.16em;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ic-lg { width: 1.3em; height: 1.3em; }
+
+/* 按鈕裡有圖示時，圖示跟字要對齊、留一點氣 */
+button .ic, a .ic { margin-right: 0.35em; }
+button .ic:only-child, a .ic:only-child { margin-right: 0; }
+
+/* 沒有 backdrop-filter 的瀏覽器（或關掉合成的投影環境）退成實心面板，
+   不要變成一片半透明看不清楚的東西 */
+@supports not (backdrop-filter: blur(4px)) {
+  .glass { background: var(--glass-bg-strong); }
+}
+
+/* 使用者要求減少動態時，把水痕也拿掉 */
+@media (prefers-reduced-motion: reduce) {
+  body::after { opacity: 0.25; }
+}

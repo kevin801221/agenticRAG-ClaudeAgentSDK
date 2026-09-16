@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agentic RAG · 決策軌跡</title>
+<link rel="stylesheet" href="/static/atmosphere.css">
 <style>
   :root{
     --ground:#151B2B; --panel:#1E2639; --panel-2:#232C42; --rail:#33405C;
@@ -631,6 +632,61 @@
     .col{overflow-y:visible}
     body{height:auto}
   }
+
+  /* ══════════ 雨天玻璃：材質覆寫 ══════════
+     只改表面。語意色不動：琥珀=正在動作、綠=完成、紅=折返、藍=SDK 內建。 */
+
+  header,
+  .pipe,
+  .rail,
+  .node-card,
+  .cmpcol,
+  .trace-item,
+  .spec,
+  .pat,
+  .note,
+  .dropzone .box,
+  .jobs {
+    background: var(--glass-bg) !important;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-color: var(--glass-line) !important;
+  }
+  header, .pipe, .rail { box-shadow: var(--glass-lip), 0 6px 24px rgba(3, 7, 16, .28); }
+  .node-card, .cmpcol, .trace-item, .spec, .pat { box-shadow: var(--glass-lip), var(--glass-drop); }
+
+  /* 兩欄工作區：不要純色，給一點景深 */
+  main { background:
+    radial-gradient(780px 540px at 22% 12%, rgba(104,146,214,.075), transparent 64%),
+    radial-gradient(620px 460px at 88% 92%, rgba(214,158,74,.045), transparent 62%),
+    transparent; }
+
+  /* 流程圖的底 */
+  #pipe .stage-band { opacity: .55 }
+
+  /* 抽屜：展開時是一塊真的玻璃，後面的內容會透出來 */
+  .rail .panel { background: transparent }
+  .rail .tabs { background: rgba(255,255,255,.018); border-right-color: var(--glass-line) }
+  .rail .tab:hover, .rail .tab.on { background: rgba(255,255,255,.055) }
+
+  /* 輸入框：凹進去的玻璃 */
+  input, select, textarea {
+    background: rgba(9, 13, 22, .5) !important;
+    border-color: var(--glass-line) !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.28);
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--signal) !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.28), 0 0 0 3px rgba(242,180,65,.12);
+  }
+
+  /* 卡片邊緣柔一階 */
+  .node-card, .cmpcol, .trace-item, .spec, .pat { border-radius: 8px }
+  .trace-item:hover { border-color: var(--glass-line-hi) !important; transform: translateY(-1px) }
+  .trace-item { transition: transform .14s, border-color .14s }
+
+  /* 整頁拖放遮罩：霧而不是黑幕 */
+  .dropzone { background: rgba(9,13,21,.6); backdrop-filter: blur(6px) }
 </style>
 </head>
 <body>
