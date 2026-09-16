@@ -815,6 +815,57 @@ embedding 載不動、沒網路、MPS 出問題 —— 自動退回純 BM25 並�
 
 ---
 
+## embedding 模型：下載不用任何 key（但有例外）
+
+`intfloat/multilingual-e5-small` 是**公開模型**，匿名就抓得到。
+整套系統零 API key 的說法對 embedding 這一層也成立：
+
+```
+問答（LLM）   → 你的 Claude 訂閱額度，不是 API key
+向量化        → 本機跑的 e5-small，下載不用登入，跑起來連網路都不用
+檢索          → 全在本機（BM25 + numpy / chroma）
+```
+
+模型下載到 `~/.cache/huggingface/hub/models--intfloat--multilingual-e5-small/`（470 MB），
+**不在專案裡** —— 專案重 clone 不用再抓一次。
+
+### ⚠️ 但不是每個模型都能匿名下載
+
+想換 `EMBEDDING_MODEL` 的話要注意 HuggingFace 的 **gated** 機制。實測匿名抓 `config.json`：
+
+| 模型 | `gated` | 匿名 |
+|---|---|---|
+| `intfloat/multilingual-e5-small` | `False` | ✅ HTTP 200 |
+| `BAAI/bge-m3` | `False` | ✅ HTTP 200 |
+| `meta-llama/Llama-3.2-1B` | `manual` | ❌ **HTTP 401** |
+| `google/gemma-2-2b` | `manual` | ❌ **HTTP 401** |
+
+**gated 不是「要付費」，是「要留下你是誰」** —— Meta / Google 那類要你先在模型頁面按同意
+接受授權，才會讓你的 token 抓得到。多數 embedding 模型（e5、bge、gte、jina）是完全公開的。
+
+撞到的話錯誤長這樣，**看起來像網路壞了，其實是授權**：
+
+```
+401 Client Error … Cannot access gated repo
+```
+
+處理：到那個模型的 HF 頁面按同意 → `uv run huggingface-cli login` → **重建索引**。
+
+### 三十個人同時抓會不會被擋
+
+每次啟動都會看到的這句不是錯誤，是推銷：
+
+> `Please set a HF_TOKEN to enable higher rate limits and faster downloads.`
+
+匿名有速率上限，**一間教室同一個出口 IP 同時抓有機會撞到**。三個做法選一個：
+
+1. 叫學生上課前先在家跑一次 `uv run python index_corpus.py`
+2. 現場一律 `--no-vectors`（純 BM25，零下載，功能完整）
+3. 把 `~/.cache/huggingface/hub/models--intfloat--multilingual-e5-small/` 整個資料夾
+   拷貝給學生放同一個路徑（或設 `HF_HOME` 指到隨身碟）
+
+---
+
 ## 參考文獻
 
 - Modular RAG — Gao et al. 2024, [arXiv:2407.21059](https://arxiv.org/abs/2407.21059)

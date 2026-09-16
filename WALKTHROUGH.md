@@ -639,7 +639,9 @@ Studio 頂上「模型：…」點下去：OAuth 訂閱／Anthropic API Key／
 | `ModuleNotFoundError: modules` | kernel 選錯了，跟開哪個資料夾無關 | 跑 `./scripts/setup_kernel.sh`，選 `agentic-rag (.venv, Python 3.13)` |
 | VS Code 說找不到套件 | 它自己在 `notebooks/` 建了一個空 venv | 刪掉 `notebooks/.venv`，再選上面那個 kernel |
 | 啟動說找不到索引 | 還沒建 | `uv run python index_corpus.py --no-vectors` |
-| 第一次跑很久沒反應 | 在下載 embedding 模型（約 100MB） | 沒網路就一律先 `--no-vectors` |
+| 第一次跑很久沒反應 | 在下載 embedding 模型（470 MB，存到 `~/.cache/huggingface/`） | 沒網路就一律先 `--no-vectors` |
+| 換了 `EMBEDDING_MODEL` 後 `401 Cannot access gated repo` | 那個模型是 gated（Llama / Gemma 那類），**不是網路壞了** | 到 HF 頁面按同意 → `huggingface-cli login` → 重建索引。或改用公開的（e5 / bge / gte / jina） |
+| 全班同時下載很慢或被擋 | 匿名下載有速率上限，同一個出口 IP 會撞到 | 課前先各自抓好，或現場一律 `--no-vectors`，或拷貝快取資料夾給學生 |
 | HyDE 效果很差 | 沒有向量索引，退回 BM25 了 | 重建索引（不加 `--no-vectors`） |
 | Self-RAG 跑 90 秒以上 | Looping 編排本來就慢 | 正常。調低 `max_turns` 或改用 CRAG |
 | 每個架構跑出來都差不多 | 問題太簡單，分不出差異 | 用刻意口語化 / 超出語料範圍的問題 |
