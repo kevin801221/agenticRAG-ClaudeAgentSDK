@@ -10,8 +10,10 @@
 
 ---
 
-> 🪝 **這個 repo 的 `.claude/` 掛了五個示範用的 hook** —— `claude` 一開就會動。
-> 現場演示的腳本在 [`docs/hooks_walkthrough.md`](docs/hooks_walkthrough.md)。
+> 🪝 **這個 repo 的 `.claude/` 掛了五個示範用的 hook** —— `claude` 一開就會動，
+> 拿來現場演示 hook 剛好（擋 `.env`、注入 context、稽核 Bash、Stop 通知）。
+> 看 [`.claude/settings.json`](.claude/settings.json) 和 `.claude/hooks/`，每支腳本開頭都寫了怎麼手動測。
+> hooks 的完整教材在課程的 `06-hooks/` 章節。
 >
 > 📖 **第一次來的話先讀 [`WALKTHROUGH.md`](WALKTHROUGH.md)** —— 一步一步從 Agent SDK
 > 帶到十四個架構全部組出來。這份 README 是功能參考，適合已經跑過一輪之後回來查。
