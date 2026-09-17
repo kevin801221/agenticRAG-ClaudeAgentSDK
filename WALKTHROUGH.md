@@ -303,6 +303,10 @@ HookMatcher(hooks=[on_pre_tool])
 
 **做完這步你應該能**：寫一個有自訂工具、而且印得出完整調用軌跡的 agent。
 
+> 🪝 **想把 hook 單獨拉出來現場演示**（擋 `.env`、注入 context、稽核 Bash）：
+> 看 [`docs/hooks_walkthrough.md`](docs/hooks_walkthrough.md) —— 15 分鐘，五個 hook，
+> 每個都配一行就能觸發的指令。這個 repo 的 `.claude/` 已經設好，`claude` 一開就會動。
+
 ---
 
 ## Step 2 🛠：把 RAG 拆成七個模組（20 分鐘）

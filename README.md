@@ -10,6 +10,9 @@
 
 ---
 
+> 🪝 **這個 repo 的 `.claude/` 掛了五個示範用的 hook** —— `claude` 一開就會動。
+> 現場演示的腳本在 [`docs/hooks_walkthrough.md`](docs/hooks_walkthrough.md)。
+>
 > 📖 **第一次來的話先讀 [`WALKTHROUGH.md`](WALKTHROUGH.md)** —— 一步一步從 Agent SDK
 > 帶到十四個架構全部組出來。這份 README 是功能參考，適合已經跑過一輪之後回來查。
 
